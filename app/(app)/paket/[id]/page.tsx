@@ -19,20 +19,20 @@ export default async function PackageDetail({ params, searchParams }: { params: 
   const name = new Map((st.data ?? []).map((s) => [s.code, s.name])), cur = st.data?.find((s) => s.code === p.status);
   return (
     <section className="max-w-4xl space-y-6">
-      <div><Link href="/paket" className="text-sm underline">Kembali ke daftar paket</Link>
+      <div><Link href="/paket" className="link text-sm">Kembali ke daftar paket</Link>
         <h1 className="mt-1 text-2xl font-semibold text-navy-800">{p.name}</h1><p className="text-slate-600">{p.internal_code}, pagu {rp(p.pagu)}, {p.execution_mode === "swakelola" ? "swakelola" : "melalui penyedia"}</p></div>
-      {sp.error && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">Perubahan gagal disimpan. Anda mungkin tidak berwenang.</p>}
-      <div className="space-y-2 rounded border bg-white p-4"><h2 className="font-semibold">Status: {cur?.name ?? p.status}</h2>{cur && <p className="text-sm text-slate-600">{cur.definition}</p>}
+      {sp.error && <p role="alert" className="alert alert-error">Perubahan gagal disimpan. Anda mungkin tidak berwenang.</p>}
+      <div className="space-y-2 card p-4"><h2 className="font-semibold">Status: {cur?.name ?? p.status}</h2>{cur && <p className="text-sm text-slate-600">{cur.definition}</p>}
         <form action={changeStatus} className="flex flex-wrap items-end gap-2"><input type="hidden" name="id" value={id} />
-          <label className="text-sm font-medium">Ubah status<select name="status" defaultValue={p.status} className="ml-2 rounded border px-2 py-1">{st.data?.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
-          <button className="rounded bg-navy-800 px-3 py-1.5 text-sm text-white">Simpan status</button></form>
+          <label className="text-sm font-medium">Ubah status<select name="status" defaultValue={p.status} className="ml-2 py-1.5">{st.data?.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
+          <button className="btn btn-dark btn-sm">Simpan status</button></form>
         {!!ev.data?.length && <ul className="mt-2 text-sm text-slate-700">{ev.data.map((e) => <li key={e.id}>{new Date(e.created_at).toLocaleString("id-ID")}: {e.from_status ? `${name.get(e.from_status) ?? e.from_status} menjadi ` : "dibuat sebagai "}{name.get(e.to_status) ?? e.to_status}</li>)}</ul>}</div>
-      <form action={linkRup} className="flex flex-wrap items-end gap-2 rounded border bg-white p-4"><input type="hidden" name="id" value={id} />
-        <label className="text-sm font-medium">Tautkan ke paket RUP<select name="rup_package_id" defaultValue={p.rup_package_id ?? ""} className="ml-2 rounded border px-2 py-1"><option value="">(belum ada kode RUP)</option>{rups.data?.map((r) => <option key={r.id} value={r.id}>{r.rup_code} {r.name}</option>)}</select></label>
-        <button className="rounded bg-navy-800 px-3 py-1.5 text-sm text-white">Simpan tautan</button></form>
+      <form action={linkRup} className="flex flex-wrap items-end gap-2 card p-4"><input type="hidden" name="id" value={id} />
+        <label className="text-sm font-medium">Tautkan ke paket RUP<select name="rup_package_id" defaultValue={p.rup_package_id ?? ""} className="ml-2 py-1.5"><option value="">(belum ada kode RUP)</option>{rups.data?.map((r) => <option key={r.id} value={r.id}>{r.rup_code} {r.name}</option>)}</select></label>
+        <button className="btn btn-dark btn-sm">Simpan tautan</button></form>
       <div className="space-y-3"><h2 className="font-semibold">Kontrak / SP</h2><p className="text-xs text-slate-600">Nilai di sini bukan realisasi keuangan. Realisasi dicatat terpisah berdasarkan dokumen pembayaran.</p>
-        {ct.data?.length ? <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-1">Bentuk</th><th className="p-1">Nomor</th><th className="p-1">Tanggal</th><th className="p-1 text-right">Hasil pemilihan</th><th className="p-1 text-right">Nilai kontrak/SP</th></tr></thead>
-          <tbody>{ct.data.map((c) => <tr key={c.id} className="border-b"><td className="p-1">{DOC[c.doc_type]}</td><td className="p-1">{c.doc_number ?? "-"}</td><td className="p-1">{c.doc_date ?? "-"}</td><td className="p-1 text-right">{rp(c.selection_result_value)}</td><td className="p-1 text-right">{rp(c.contract_value)}</td></tr>)}</tbody></table> : <p className="text-sm text-slate-600">Belum ada dokumen kontrak/SP.</p>}
+        {ct.data?.length ? <div className="table-wrap"><table><thead><tr><th>Bentuk</th><th>Nomor</th><th>Tanggal</th><th className="text-right">Hasil pemilihan</th><th className="text-right">Nilai kontrak/SP</th></tr></thead>
+          <tbody>{ct.data.map((c) => <tr key={c.id}><td>{DOC[c.doc_type]}</td><td>{c.doc_number ?? "-"}</td><td>{c.doc_date ?? "-"}</td><td className="text-right">{rp(c.selection_result_value)}</td><td className="text-right">{rp(c.contract_value)}</td></tr>)}</tbody></table></div> : <p className="text-sm text-slate-600">Belum ada dokumen kontrak/SP.</p>}
         <ContractForm packageId={id} providers={(prov.data ?? []).map((r) => ({ value: r.id, label: r.name }))} /></div>
     </section>);
 }

@@ -21,12 +21,12 @@ export default async function RupDetail({ params, searchParams }: { params: Prom
   const options = entries.map((e) => ({ value: e.id, label: `${e.label} (sisa ${rp(remaining(e.amount, usedBy(e.id)))})` }));
   return (
     <section className="max-w-4xl space-y-5">
-      <Link href="/rup" className="text-sm underline">Kembali ke daftar RUP</Link>
-      <div><h1 className="text-2xl font-semibold text-navy-800">{r.name}</h1><p className="text-slate-600">Kode RUP {r.rup_code}, pagu {rp(r.pagu)}, belum dialokasikan {rp(pkgLeft)}</p></div>
-      {sp.error && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">Penghapusan gagal. Anda mungkin tidak berwenang.</p>}
-      {mine.data?.length ? <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-1">Rekening anggaran</th><th className="p-1 text-right">Alokasi</th><th className="p-1">Aksi</th></tr></thead>
-        <tbody>{mine.data.map((a) => <tr key={a.id} className="border-b"><td className="p-1">{label.get(a.budget_entry_id) ?? a.budget_entry_id}</td><td className="p-1 text-right">{rp(a.amount)}</td>
-          <td className="p-1"><form action={deleteAllocation}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="rup" value={id} /><button className="underline">Hapus alokasi</button></form></td></tr>)}</tbody></table>
+      <Link href="/rup" className="link text-sm">Kembali ke daftar RUP</Link>
+      <div><h1 className="page-title">{r.name}</h1><p className="text-slate-600">Kode RUP {r.rup_code}, pagu {rp(r.pagu)}, belum dialokasikan {rp(pkgLeft)}</p></div>
+      {sp.error && <p role="alert" className="alert alert-error">Penghapusan gagal. Anda mungkin tidak berwenang.</p>}
+      {mine.data?.length ? <div className="table-wrap"><table><thead><tr><th>Rekening anggaran</th><th className="text-right">Alokasi</th><th>Aksi</th></tr></thead>
+        <tbody>{mine.data.map((a) => <tr key={a.id}><td>{label.get(a.budget_entry_id) ?? a.budget_entry_id}</td><td className="text-right">{rp(a.amount)}</td>
+          <td><form action={deleteAllocation}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="rup" value={id} /><button className="link">Hapus alokasi</button></form></td></tr>)}</tbody></table></div>
         : <p className="text-sm text-slate-600">Belum ada alokasi. Satu paket bisa memakai beberapa rekening, dan satu rekening bisa membiayai beberapa paket.</p>}
       {entries.length ? <AllocationForm rupId={id} options={options} /> : <p className="text-sm text-slate-600">Belum ada rekening anggaran pada versi ini. Impor anggaran lebih dulu.</p>}
     </section>);

@@ -6,6 +6,6 @@ export default async function NewPackage() {
     sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name"),
     sb.from("officials").select("id, name, official_type").eq("is_active", true).order("name").limit(1000)]);
   const by = (t: string) => (o.data ?? []).filter((r) => r.official_type === t).map((r) => ({ value: r.id, label: r.name }));
-  return <section className="space-y-4"><h1 className="text-2xl font-semibold text-navy-800">Tambah paket pengadaan</h1>
+  return <section className="space-y-4"><h1 className="page-title">Tambah paket pengadaan</h1>
     <PackageForm methods={(m.data ?? []).map((r) => ({ value: r.id, label: r.name }))} ppbj={by("ppbj")} ppk={by("ppk")} pptk={by("pptk")} /></section>;
 }

@@ -1,4 +1,4 @@
--- SIPANDA PBJ - Tahap 1: fondasi (1 OPD; organization_id dipertahankan untuk kompatibilitas)
+-- SIPANDABAJA - Tahap 1: fondasi (1 OPD; organization_id dipertahankan untuk kompatibilitas)
 create extension if not exists pgcrypto;
 create type public.app_role as enum ('super_admin','admin_opd','ppbj','ppk','pptk','viewer','auditor');
 

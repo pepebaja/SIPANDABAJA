@@ -17,19 +17,19 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
   const href = (p: number) => `/paket?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) })}`;
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold text-navy-800">Paket pengadaan <span className="text-base font-normal text-slate-600">Tahun {ctx.year}, {ctx.stageName}</span></h1>
-      <Link href="/paket/baru" className="inline-block rounded bg-navy-800 px-4 py-2 text-white">Tambah paket</Link>
-      <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Cari kode atau nama paket" className="w-72 rounded border px-3 py-2" />
-        <button className="rounded bg-teal-600 px-4 py-2 text-white">Cari</button></form>
-      {error ? <p role="alert" className="text-red-800">Data tidak dapat dimuat. Muat ulang halaman.</p>
+      <h1 className="page-title">Paket pengadaan <span className="page-sub">Tahun {ctx.year}, {ctx.stageName}</span></h1>
+      <Link href="/paket/baru" className="btn btn-dark">Tambah paket</Link>
+      <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Cari kode atau nama paket" className="w-72" />
+        <button className="btn btn-primary">Cari</button></form>
+      {error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat. Muat ulang halaman.</p>
         : !data?.length ? <p className="text-slate-600">{q ? "Tidak ada paket yang cocok." : "Belum ada paket pada tahun/tahapan ini."}</p> : (
-        <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Kode</th><th className="p-2">Nama paket</th><th className="p-2 text-right">Pagu</th><th className="p-2">Status</th></tr></thead>
-          <tbody>{data.map((p) => <tr key={p.id} className="border-b"><td className="p-2"><Link className="underline" href={`/paket/${p.id}`}>{p.internal_code}</Link></td>
-            <td className="p-2">{p.name}{!p.rup_package_id && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">Belum ada kode RUP</span>}</td>
-            <td className="p-2 text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td className="p-2">{statusName.get(p.status) ?? p.status}</td></tr>)}</tbody></table>)}
+        <div className="table-wrap"><table><thead><tr><th>Kode</th><th>Nama paket</th><th className="text-right">Pagu</th><th>Status</th></tr></thead>
+          <tbody>{data.map((p) => <tr key={p.id}><td><Link className="link" href={`/paket/${p.id}`}>{p.internal_code}</Link></td>
+            <td>{p.name}{!p.rup_package_id && <span className="ml-2 badge badge-warn">Belum ada kode RUP</span>}</td>
+            <td className="text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td>{statusName.get(p.status) ?? p.status}</td></tr>)}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">
-        {page > 1 && <Link className="underline" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages} ({count ?? 0} paket)</span>
-        {page < pages && <Link className="underline" href={href(page + 1)}>Berikutnya</Link>}</nav>
+        {page > 1 && <Link className="link" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages} ({count ?? 0} paket)</span>
+        {page < pages && <Link className="link" href={href(page + 1)}>Berikutnya</Link>}</nav>
     </section>
   );
 }

@@ -22,16 +22,16 @@ export default async function MasterPage({ params, searchParams }: { params: Pro
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE)), href = (p: number) => `/master/${def.slug}?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) })}`;
   return (
     <section className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-      <div className="space-y-3"><h1 className="text-2xl font-semibold text-navy-800">{def.title}</h1>
-        <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Cari nama" className="w-64 rounded border px-3 py-2" /><button className="rounded bg-teal-600 px-4 py-2 text-white">Cari</button></form>
-        {error ? <p role="alert" className="text-red-800">Data tidak dapat dimuat.</p> : !data?.length ? <p className="text-slate-600">{q ? "Tidak ada yang cocok." : "Belum ada data. Tambahkan lewat formulir."}</p> : (
-          <table className="w-full text-left text-sm"><thead><tr className="border-b">{def.fields.map((f) => <th key={f.name} className="p-2">{f.label}</th>)}<th className="p-2">Status</th><th className="p-2">Aksi</th></tr></thead>
-            <tbody>{(data as Record<string, unknown>[]).map((r) => <tr key={String(r.id)} className="border-b">{fields.map((f) => <td key={f.name} className="p-2">{show(f, r)}</td>)}
-              <td className="p-2">{r.is_active ? "Aktif" : "Nonaktif"}</td>
-              <td className="flex gap-3 p-2"><Link className="underline" href={`/master/${def.slug}?edit=${r.id}`}>Ubah</Link>
+      <div className="space-y-3"><div><Link href="/master" className="link text-sm">← Master data</Link><h1 className="page-title mt-1">{def.title}</h1></div>
+        <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Cari nama" className="w-64" /><button className="btn btn-primary">Cari</button></form>
+        {error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !data?.length ? <p className="text-slate-600">{q ? "Tidak ada yang cocok." : "Belum ada data. Tambahkan lewat formulir."}</p> : (
+          <div className="table-wrap"><table><thead><tr>{def.fields.map((f) => <th key={f.name}>{f.label}</th>)}<th>Status</th><th>Aksi</th></tr></thead>
+            <tbody>{(data as Record<string, unknown>[]).map((r) => <tr key={String(r.id)}>{fields.map((f) => <td key={f.name}>{show(f, r)}</td>)}
+              <td><span className={`badge ${r.is_active ? "badge-ok" : "badge-off"}`}>{r.is_active ? "Aktif" : "Nonaktif"}</span></td>
+              <td><div className="flex items-center gap-4"><Link className="link" href={`/master/${def.slug}?edit=${r.id}`}>Ubah</Link>
                 <form action={toggleMaster}><input type="hidden" name="slug" value={def.slug} /><input type="hidden" name="id" value={String(r.id)} /><input type="hidden" name="active" value={String(!r.is_active)} />
-                  <button className="underline">{r.is_active ? "Nonaktifkan" : "Aktifkan"}</button></form></td></tr>)}</tbody></table>)}
-        <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="underline" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages}</span>{page < pages && <Link className="underline" href={href(page + 1)}>Berikutnya</Link>}</nav></div>
+                  <button className="link">{r.is_active ? "Nonaktifkan" : "Aktifkan"}</button></form></div></td></tr>)}</tbody></table></div>)}
+        <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="link" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages}</span>{page < pages && <Link className="link" href={href(page + 1)}>Berikutnya</Link>}</nav></div>
       <MasterForm slug={def.slug} fields={fields} values={(editing.data as Record<string, unknown> | null) ?? {}} id={editing.data ? String(sp.edit) : undefined} />
     </section>
   );
