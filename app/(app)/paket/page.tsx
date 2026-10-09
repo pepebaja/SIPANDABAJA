@@ -18,6 +18,7 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold text-navy-800">Paket pengadaan <span className="text-base font-normal text-slate-600">Tahun {ctx.year}, {ctx.stageName}</span></h1>
+      <Link href="/paket/baru" className="inline-block rounded bg-navy-800 px-4 py-2 text-white">Tambah paket</Link>
       <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Cari kode atau nama paket" className="w-72 rounded border px-3 py-2" />
         <button className="rounded bg-teal-600 px-4 py-2 text-white">Cari</button></form>
       {error ? <p role="alert" className="text-red-800">Data tidak dapat dimuat. Muat ulang halaman.</p>
