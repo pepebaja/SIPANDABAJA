@@ -27,3 +27,10 @@ describe("contract & rup schema", () => {
   it("kontrak: menolak jenis dokumen dan angka tidak valid", () => { expect(contractSchema.safeParse({ ...c, doc_type: "x" }).success).toBe(false); expect(contractSchema.safeParse({ ...c, contract_value: "abc" }).success).toBe(false); });
   it("rup: pagu wajib", () => { const r = { rup_code: "R1", name: "N", procurement_type: "barang", planned_method_id: "", pagu: "" }; expect(rupSchema.safeParse(r).success).toBe(false); expect(rupSchema.parse({ ...r, pagu: "500" }).pagu).toBe("500.00"); });
 });
+import { allocationSchema, cashItemSchema, remaining } from "@/lib/allocations";
+describe("alokasi dan kas", () => {
+  const u = "11111111-1111-1111-1111-111111111111";
+  it("sisa kapasitas tanpa galat desimal", () => expect(remaining("1000.00", ["0.10", "0.20"])).toBe("999.70"));
+  it("alokasi: nilai harus > 0", () => { expect(allocationSchema.safeParse({ rup_package_id: u, budget_entry_id: u, amount: "0" }).success).toBe(false); expect(allocationSchema.parse({ rup_package_id: u, budget_entry_id: u, amount: "1.000" }).amount).toBe("1000.00"); });
+  it("kas: bulan 1-12", () => { expect(cashItemSchema.safeParse({ budget_entry_id: u, period_month: "13", planned_amount: "1" }).success).toBe(false); expect(cashItemSchema.parse({ budget_entry_id: u, period_month: "3", planned_amount: "0" }).period_month).toBe(3); });
+});

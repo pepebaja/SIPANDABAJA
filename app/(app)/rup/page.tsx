@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
 import { RupForm } from "@/components/rup-form";
@@ -15,7 +16,7 @@ export default async function RupPage() {
       <div className="space-y-3"><h1 className="text-2xl font-semibold text-navy-800">Paket RUP <span className="text-base font-normal text-slate-600">Tahun {ctx.year}, {ctx.stageName}</span></h1>
         {error ? <p role="alert" className="text-red-800">Data tidak dapat dimuat.</p> : !data?.length ? <p className="text-slate-600">Belum ada paket RUP. Tambahkan lewat formulir.</p> : (
           <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Kode RUP</th><th className="p-2">Nama</th><th className="p-2">Jenis</th><th className="p-2 text-right">Pagu</th><th className="p-2">Verifikasi</th></tr></thead>
-            <tbody>{data.map((r) => <tr key={r.id} className="border-b"><td className="p-2">{r.rup_code}</td><td className="p-2">{r.name}</td><td className="p-2">{TYPES[r.procurement_type]}</td><td className="p-2 text-right tabular-nums">{rp(r.pagu)}</td><td className="p-2">{r.verification_status === "verified" ? "Terverifikasi" : "Belum diverifikasi"}</td></tr>)}</tbody></table>)}
+            <tbody>{data.map((r) => <tr key={r.id} className="border-b"><td className="p-2"><Link className="underline" href={`/rup/${r.id}`}>{r.rup_code}</Link></td><td className="p-2">{r.name}</td><td className="p-2">{TYPES[r.procurement_type]}</td><td className="p-2 text-right tabular-nums">{rp(r.pagu)}</td><td className="p-2">{r.verification_status === "verified" ? "Terverifikasi" : "Belum diverifikasi"}</td></tr>)}</tbody></table>)}
         {(count ?? 0) > 100 && <p className="text-xs text-slate-600">Menampilkan 100 dari {count} paket.</p>}</div>
       <RupForm methods={(m ?? []).map((r) => ({ value: r.id, label: r.name }))} />
     </section>);
