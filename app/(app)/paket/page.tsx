@@ -24,7 +24,7 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
       {error ? <p role="alert" className="text-red-800">Data tidak dapat dimuat. Muat ulang halaman.</p>
         : !data?.length ? <p className="text-slate-600">{q ? "Tidak ada paket yang cocok." : "Belum ada paket pada tahun/tahapan ini."}</p> : (
         <table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Kode</th><th className="p-2">Nama paket</th><th className="p-2 text-right">Pagu</th><th className="p-2">Status</th></tr></thead>
-          <tbody>{data.map((p) => <tr key={p.id} className="border-b"><td className="p-2">{p.internal_code}</td>
+          <tbody>{data.map((p) => <tr key={p.id} className="border-b"><td className="p-2"><Link className="underline" href={`/paket/${p.id}`}>{p.internal_code}</Link></td>
             <td className="p-2">{p.name}{!p.rup_package_id && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">Belum ada kode RUP</span>}</td>
             <td className="p-2 text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td className="p-2">{statusName.get(p.status) ?? p.status}</td></tr>)}</tbody></table>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">

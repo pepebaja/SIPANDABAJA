@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buildSchema, findMaster } from "@/lib/masters";
-export type FormState = { error?: string; ok?: boolean };
+export type FormState = { error?: string; ok?: boolean; warning?: string };
 export async function saveMaster(_p: FormState, fd: FormData): Promise<FormState> {
   const def = findMaster(String(fd.get("slug")));
   if (!def) return { error: "Jenis data master tidak dikenal." };

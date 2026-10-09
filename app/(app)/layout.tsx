@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           : <p className="text-sm">Tahun/tahapan anggaran belum disiapkan.</p>}
         <form action="/api/auth/logout" method="post"><button className="rounded border border-white/40 px-3 py-1 text-sm hover:bg-white/10">Keluar</button></form>
       </header>
-      <nav className="flex gap-4 border-b bg-white px-6 py-2 text-sm"><Link href="/">Beranda</Link><Link href="/anggaran/impor">Impor anggaran</Link><Link href="/paket">Paket pengadaan</Link><Link href="/master">Master data</Link></nav>
+      <nav className="flex gap-4 border-b bg-white px-6 py-2 text-sm"><Link href="/">Beranda</Link><Link href="/anggaran/impor">Impor anggaran</Link><Link href="/rup">Paket RUP</Link><Link href="/paket">Paket pengadaan</Link><Link href="/master">Master data</Link></nav>
       {s && s.code !== "MURNI" && <p className="bg-amber-100 px-6 py-1.5 text-sm text-amber-900">Tahapan aktif: <b>{s.name}</b>. Seluruh data di bawah mengikuti tahapan ini.</p>}
       <div className="p-6">{children}</div>
     </div>

@@ -20,3 +20,10 @@ describe("packageSchema", () => {
     expect(packageSchema.safeParse({ ...base, assigned_date: "2026-05-01", due_date: "2026-04-01" }).success).toBe(false);
   });
 });
+import { contractSchema, rupSchema } from "@/lib/contracts";
+describe("contract & rup schema", () => {
+  const c = { doc_type: "spk", doc_number: " 12/SPK ", doc_date: "", provider_id: "", selection_result_value: "", contract_value: "1.000.000,50" };
+  it("kontrak: opsional kosong -> null, uang diparse", () => expect(contractSchema.parse(c)).toMatchObject({ doc_number: "12/SPK", doc_date: null, provider_id: null, selection_result_value: null, contract_value: "1000000.50" }));
+  it("kontrak: menolak jenis dokumen dan angka tidak valid", () => { expect(contractSchema.safeParse({ ...c, doc_type: "x" }).success).toBe(false); expect(contractSchema.safeParse({ ...c, contract_value: "abc" }).success).toBe(false); });
+  it("rup: pagu wajib", () => { const r = { rup_code: "R1", name: "N", procurement_type: "barang", planned_method_id: "", pagu: "" }; expect(rupSchema.safeParse(r).success).toBe(false); expect(rupSchema.parse({ ...r, pagu: "500" }).pagu).toBe("500.00"); });
+});
