@@ -16,3 +16,5 @@ describe("cash", () => {
   it("tanpa jadwal -> peringatan, bukan error", () => expect(cashWarnings(entries, [], [{ id: "p", name: "X", dueMonth: null, allocations: [] }])[0]?.type).toBe("no_schedule"));
   it("kas cukup -> tidak ada peringatan", () => expect(cashWarnings(entries, [{ entryId: "e1", month: 2, planned: "400.00" }], [{ id: "p1", name: "ATK", dueMonth: 3, allocations: [{ entryId: "e1", amount: "400.00" }] }])).toEqual([]));
 });
+import { formatRupiah } from "@/lib/format";
+describe("format", () => { it("rupiah Indonesia", () => { expect(formatRupiah("1234567.5")).toBe("Rp 1.234.567,50"); expect(formatRupiah("-5.00")).toBe("-Rp 5,00"); }); });
