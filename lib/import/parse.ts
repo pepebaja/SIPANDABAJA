@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-export const sha256 = (buf: Uint8Array) => createHash("sha256").update(buf).digest("hex");
 /** Mengubah "Rp 1.234.567,89" atau angka menjadi string desimal 2 digit tanpa floating-point pada string. */
 export function parseRupiah(v: unknown): string | null {
   if (typeof v === "number") return Number.isFinite(v) ? v.toFixed(2) : null;

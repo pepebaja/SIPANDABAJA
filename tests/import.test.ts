@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { parseRupiah, sha256 } from "@/lib/import/parse";
+import { parseRupiah } from "@/lib/import/parse";
+import { sha256 } from "@/lib/import/hash";
 import { readFirstSheet } from "@/lib/import/xlsx";
 import { validateBudgetRows, type Masters } from "@/lib/import/budget";
 const m: Masters = { subactivities: new Map([["1.01.01", "s1"]]), accounts: new Map([["5.1.02", "a1"]]), fundingSources: new Map([["DAU", "f1"]]), pptkByNip: new Map([["1980", "p1"]]) };

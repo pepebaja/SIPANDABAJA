@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
 import { readFirstSheet } from "@/lib/import/xlsx";
-import { sha256 } from "@/lib/import/parse";
+import { sha256 } from "@/lib/import/hash";
 import { validateBudgetRows, type Masters, type RowError } from "@/lib/import/budget";
 
 export type ImportState = { error?: string; jobId?: string; fileName?: string; total?: number; ok?: number; failed?: number; errors?: RowError[]; confirmed?: number };

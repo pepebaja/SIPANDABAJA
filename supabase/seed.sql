@@ -26,3 +26,7 @@ select o.id, s.code, s.name, s.def, s.ord from public.organizations o, (values
  ('SELESAI','Selesai','Seluruh tahapan selesai.',11),
  ('BATAL','Dibatalkan','Paket dibatalkan.',12),
  ('TUNDA','Ditunda','Paket ditunda.',13)) as s(code,name,def,ord) on conflict do nothing;
+update public.package_statuses set stage_group = 'diproses' where code in ('PEMILIHAN','HASIL','KONTRAK','PELAKSANAAN','SERAH_TERIMA');
+update public.package_statuses set stage_group = 'selesai' where code = 'SELESAI';
+update public.package_statuses set stage_group = 'tidak_aktif' where code = 'BATAL';
+update public.package_statuses set needs_followup = true where code = 'PERBAIKAN';
