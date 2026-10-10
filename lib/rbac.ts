@@ -10,6 +10,7 @@ export const PERMISSIONS = {
   "print-profile:write": ["super_admin", "admin_opd"],
   "budget-setup:write": ["super_admin", "admin_opd"],
   "budget:import": ["super_admin", "admin_opd", "ppbj"],
+  "cash:write": ["super_admin", "admin_opd", "ppbj"],
   "audit:read": ["super_admin", "admin_opd", "auditor"],
 } as const satisfies Record<string, readonly Role[]>;
 export type Permission = keyof typeof PERMISSIONS;

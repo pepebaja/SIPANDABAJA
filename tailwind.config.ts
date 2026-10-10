@@ -7,9 +7,10 @@ export default {
         navy: { 700: "#14264f", 800: "#0c1a3a", 900: "#070f26", 950: "#040918" },
         teal: { 50: "#ecfeff", 100: "#cffafe", 600: "#0e7490", 700: "#155e75" },
       },
+      // Seluruh aplikasi memakai Arial (cadangan: Helvetica/Liberation Sans yang metriknya sama bila Arial tidak terpasang).
       fontFamily: {
-        sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
-        display: ["var(--font-display)", "var(--font-body)", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["Arial", "Helvetica", "Liberation Sans", "sans-serif"],
+        display: ["Arial", "Helvetica", "Liberation Sans", "sans-serif"],
       },
       borderRadius: { DEFAULT: "0.625rem" },
       boxShadow: {

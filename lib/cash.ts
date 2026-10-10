@@ -1,12 +1,16 @@
 import { fromCents, toCents } from "./money";
-export type CashItem = { entryId: string; month: number; planned: string };
+export const QUARTER_LABELS = ["Triwulan I", "Triwulan II", "Triwulan III", "Triwulan IV"] as const;
+export const QUARTER_SHORT = ["TW I", "TW II", "TW III", "TW IV"] as const;
+export const monthToQuarter = (month: number): number => Math.ceil(month / 3);
+
+export type CashItem = { entryId: string; quarter: number; planned: string };
 export type Entry = { id: string; amount: string };
-export type PkgSchedule = { id: string; name: string; dueMonth: number | null; allocations: { entryId: string; amount: string }[] };
+export type PkgSchedule = { id: string; name: string; dueQuarter: number | null; allocations: { entryId: string; amount: string }[] };
 export type CashWarning = { type: "exceeds_pagu" | "cash_not_ready" | "no_schedule"; refId: string; message: string };
 
 export function quarterTotals(items: CashItem[]): string[] {
   const q = [0n, 0n, 0n, 0n];
-  for (const i of items) q[Math.floor((i.month - 1) / 3)]! += toCents(i.planned);
+  for (const i of items) q[i.quarter - 1]! += toCents(i.planned);
   return q.map(fromCents);
 }
 /** Peringatan alat bantu; BUKAN persetujuan, dan bukan saldo kas bank aktual. */
@@ -19,11 +23,16 @@ export function cashWarnings(entries: Entry[], items: CashItem[], pkgs: PkgSched
     if (total > toCents(e.amount)) out.push({ type: "exceeds_pagu", refId: e.id, message: `Rencana kas ${fromCents(total)} melebihi pagu rekening ${e.amount}.` });
   }
   for (const p of pkgs) {
-    if (p.dueMonth === null) { out.push({ type: "no_schedule", refId: p.id, message: `Paket "${p.name}" belum punya jadwal; keselarasan kas tidak dapat diperiksa.` }); continue; }
+    if (p.dueQuarter === null) { out.push({ type: "no_schedule", refId: p.id, message: `Paket "${p.name}" belum punya jadwal; keselarasan kas tidak dapat diperiksa.` }); continue; }
     for (const a of p.allocations) {
-      const cum = (byEntry.get(a.entryId) ?? []).filter((i) => i.month <= p.dueMonth!).reduce((s, i) => s + toCents(i.planned), 0n);
-      if (cum < toCents(a.amount)) out.push({ type: "cash_not_ready", refId: p.id, message: `Paket "${p.name}": rencana kas kumulatif s.d. bulan ${p.dueMonth} (${fromCents(cum)}) kurang dari alokasi ${a.amount}.` });
+      const cum = (byEntry.get(a.entryId) ?? []).filter((i) => i.quarter <= p.dueQuarter!).reduce((s, i) => s + toCents(i.planned), 0n);
+      if (cum < toCents(a.amount)) out.push({ type: "cash_not_ready", refId: p.id, message: `Paket "${p.name}": rencana kas kumulatif s.d. triwulan ${p.dueQuarter} (${fromCents(cum)}) kurang dari alokasi ${a.amount}.` });
     }
   }
   return out;
+}
+/** Membagi nilai menjadi 4 triwulan sama besar; sisa pembulatan (sen) masuk triwulan IV. */
+export function splitEvenly(total: string): string[] {
+  const c = toCents(total), base = c / 4n, rest = c - base * 4n;
+  return [base, base, base, base + rest].map(fromCents);
 }

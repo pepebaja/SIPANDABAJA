@@ -1,6 +1,6 @@
 # SIPANDABAJA
 
-**Sistem Informasi Pantau Data Pengadaan Barang dan Jasa.** Next.js 15 + Supabase.
+**Sistem Informasi Pantau Data Pengadaan Barang dan Jasa.** Next.js 15 + Supabase. Font aplikasi: Arial.
 Masuk memakai **username** (bukan email).
 
 ## Pemasangan (sekali saja)
@@ -38,6 +38,14 @@ Dipilih saat masuk (halaman login) dan menjadi konteks seluruh aplikasi. Dapat d
 - Aturan password: minimal 10 karakter, ada huruf besar, huruf kecil, dan angka; tidak memuat username/kata umum.
 - Admin OPD tidak dapat membuat/mengubah akun Super Admin atau Admin OPD lain. Super Admin aktif terakhir tidak dapat dinonaktifkan.
 - Percobaan masuk dibatasi (5 gagal/username dan 20 gagal/IP per 15 menit).
+
+## Anggaran kas (per triwulan)
+
+Menu **Anggaran kas** menyusun rencana kas per **triwulan (TW I-IV)** untuk setiap Program > Kegiatan > Sub Kegiatan > Belanja, dengan subtotal tiap tingkat.
+- **Input manual**: edit langsung pada tabel, tombol ÷4 membagi pagu rata, lalu *Simpan perubahan*.
+- **Unggah Excel/PDF**: gunakan *Unduh template Excel* (berisi seluruh rekening anggaran), isi kolom `tw1`-`tw4`, unggah, periksa pratinjau, lalu *Terapkan*.
+  PDF berbasis teks dibaca otomatis (best-effort; cocokkan kode sub kegiatan dan rekening dengan anggaran). PDF hasil scan tidak didukung.
+- **Wajib** menjalankan migrasi `supabase/migrations/20260107000000_cash_quarterly.sql` (mengubah kolom bulan menjadi triwulan; data bulanan lama digabung otomatis).
 
 ## Laporan dan dokumen cetak
 

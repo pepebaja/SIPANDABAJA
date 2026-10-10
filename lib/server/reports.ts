@@ -8,7 +8,8 @@ import { can, ROLE_LABELS, type Role } from "@/lib/rbac";
 import { derive, totals } from "@/lib/realization";
 import { fromCents, toCents } from "@/lib/money";
 import { parseRupiah } from "@/lib/import/parse";
-import { MONTHS } from "@/lib/allocations";
+import { QUARTER_LABELS } from "@/lib/cash";
+import { loadCashEntries } from "./cash-data";
 import { DOC_TYPES, KINDS } from "@/lib/transactions";
 import { actionLabel, auditSummary, tableLabel } from "@/lib/audit-labels";
 import { fmtDate, fmtDateTime } from "@/lib/date";
@@ -17,7 +18,6 @@ import { findReport, type Report } from "@/lib/report-types";
 const m = (v: unknown) => parseRupiah(v) ?? "0.00";
 const sum = (xs: string[]) => fromCents(xs.reduce((a, x) => a + toCents(x), 0n));
 const RUP_TYPES: Record<string, string> = { barang: "Barang", konstruksi: "Konstruksi", konsultansi: "Konsultansi", jasa_lainnya: "Jasa lainnya" };
-const MONTH_KEYS = MONTHS.map((_, i) => `m${i + 1}`);
 type Ctx = { sb: SupabaseClient; ctx: ActiveContext | null; session: Session };
 
 const entryLabel = (e: any) => `${e.subactivities?.code ?? ""} / ${e.expenditure_accounts?.code ?? ""}: ${e.description}`;
@@ -81,23 +81,33 @@ export async function buildReport(slug: string, { sb, ctx, session }: Ctx): Prom
           rows, totals: { nama: "TOTAL", pagu: sum(rows.map((r) => r.pagu)), alok: sum(rows.map((r) => r.alok)), sisa: sum(rows.map((r) => r.sisa)) } } };
       }
       case "anggaran-kas": {
-        const { data: plan } = await sb.from("cash_plans").select("id").eq("budget_version_id", vid!).order("created_at").limit(1).maybeSingle();
-        const [entries, items] = await Promise.all([loadEntryRows(sb, vid!),
-          plan ? fetchAll<any>((f, t) => sb.from("cash_plan_items").select("id, budget_entry_id, period_month, planned_amount").eq("cash_plan_id", plan.id).order("id").range(f, t)) : Promise.resolve([] as any[])]);
-        const per = new Map<string, Map<number, string[]>>();
-        for (const i of items) { const mm = per.get(i.budget_entry_id) ?? new Map<number, string[]>(); mm.set(i.period_month, [...(mm.get(i.period_month) ?? []), m(i.planned_amount)]); per.set(i.budget_entry_id, mm); }
-        const rows = entries.filter((e) => per.has(e.id)).map((e, i) => {
-          const mm = per.get(e.id)!, r: Record<string, any> = { no: i + 1, rek: entryLabel(e) };
-          MONTH_KEYS.forEach((k, idx) => { r[k] = sum(mm.get(idx + 1) ?? []); });
-          r.total = sum(MONTH_KEYS.map((k) => r[k])); r.pagu = m(e.amount); return r;
-        });
-        const tot: Record<string, any> = { rek: "TOTAL" };
-        [...MONTH_KEYS, "total", "pagu"].forEach((k) => { tot[k] = sum(rows.map((r) => r[k])); });
+        const { entries } = await loadCashEntries(sb, vid!);
+        type Row = Record<string, string | number | null>;
+        const agg = (es: typeof entries) => { const q = [0n, 0n, 0n, 0n]; let pagu = 0n; for (const e of es) { pagu += toCents(e.pagu); e.q.forEach((v, i) => { if (v !== null) q[i]! += toCents(v); }); } const total = q.reduce((x, y) => x + y, 0n); return { q, pagu, total }; };
+        const fill = (a: ReturnType<typeof agg>): Row => ({ pagu: fromCents(a.pagu), tw1: fromCents(a.q[0]!), tw2: fromCents(a.q[1]!), tw3: fromCents(a.q[2]!), tw4: fromCents(a.q[3]!), total: fromCents(a.total), selisih: fromCents(a.pagu - a.total) });
+        const rows: Row[] = []; let no = 0;
+        const progs = [...new Set(entries.map((e) => e.progCode))];
+        for (const pc of progs) {
+          const pe = entries.filter((e) => e.progCode === pc);
+          rows.push({ no: null, uraian: `${pc} ${pe[0]!.progName}`, ...fill(agg(pe)), _lvl: 1, _ind: 0 });
+          for (const ac of [...new Set(pe.map((e) => e.actCode))]) {
+            const ae = pe.filter((e) => e.actCode === ac);
+            rows.push({ no: null, uraian: `${ac} ${ae[0]!.actName}`, ...fill(agg(ae)), _lvl: 2, _ind: 1 });
+            for (const sc of [...new Set(ae.map((e) => e.subCode))]) {
+              const se = ae.filter((e) => e.subCode === sc);
+              rows.push({ no: null, uraian: `${sc} ${se[0]!.subName}`, ...fill(agg(se)), _lvl: 3, _ind: 2 });
+              for (const e of se) rows.push({ no: ++no, uraian: `${e.accCode} ${e.accName} - ${e.desc}${e.fund ? ` (${e.fund})` : ""}`, ...fill(agg([e])), _ind: 3 });
+            }
+          }
+        }
+        const all = fill(agg(entries));
         return { report: { ...base, columns: [
-          { key: "no", label: "No", kind: "int", align: "center", width: 6 }, { key: "rek", label: "Rekening anggaran", width: 48 },
-          ...MONTHS.map((mn, i) => ({ key: MONTH_KEYS[i]!, label: mn.slice(0, 3), kind: "money" as const, width: 15 })),
-          { key: "total", label: "Total rencana kas", kind: "money" as const, width: 18 }, { key: "pagu", label: "Pagu rekening", kind: "money" as const, width: 18 }],
-          rows, totals: tot, notes: ["Ini rencana kas yang dimasukkan pengguna, bukan saldo kas bank.", "Hanya rekening yang sudah memiliki rencana kas yang ditampilkan."] } };
+          { key: "no", label: "No", kind: "int", align: "center", width: 6 }, { key: "uraian", label: "Program / Kegiatan / Sub Kegiatan / Belanja", width: 64, indent: true },
+          { key: "pagu", label: "Pagu", kind: "money", width: 18 },
+          ...QUARTER_LABELS.map((l, i) => ({ key: `tw${i + 1}`, label: l, kind: "money" as const, width: 18 })),
+          { key: "total", label: "Total kas", kind: "money" as const, width: 18 }, { key: "selisih", label: "Selisih thd pagu", kind: "money" as const, width: 18 }],
+          rows, totals: { uraian: "TOTAL", ...all },
+          notes: ["Rencana kas per triwulan yang dimasukkan pengguna; bukan saldo kas bank.", "Baris tebal adalah subtotal Program, Kegiatan, dan Sub Kegiatan. Selisih negatif berarti rencana kas melebihi pagu."] } };
       }
       case "transaksi": {
         const [entries, tx] = await Promise.all([loadEntryRows(sb, vid!),
