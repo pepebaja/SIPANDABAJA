@@ -38,7 +38,7 @@ export function ReportTable({ report }: { report: Report }) {
       <table>
         <thead><tr>{report.columns.map((c) => <th key={c.key} className={c.align === "center" ? "text-center" : c.kind === "money" || c.kind === "percent" ? "text-right" : "text-left"}>{c.label}</th>)}</tr></thead>
         <tbody>{report.rows.length ? report.rows.map((r, i) => (
-          <tr key={i}>{report.columns.map((c) => <td key={c.key} className={`${c.align === "center" ? "text-center" : c.kind === "money" || c.kind === "percent" ? "text-right tabular-nums" : c.kind === "int" ? "text-center" : ""}`}>{formatCell(c.kind, r[c.key] ?? null)}</td>)}</tr>))
+          <tr key={i} className={r._lvl ? (r._lvl === 1 ? "bg-slate-300 font-bold" : r._lvl === 2 ? "bg-slate-200 font-bold" : "bg-slate-100 font-semibold") : ""}>{report.columns.map((c) => <td key={c.key} style={c.indent && r._ind ? { paddingLeft: `${0.5 + Number(r._ind) * 1}rem` } : undefined} className={`${c.align === "center" ? "text-center" : c.kind === "money" || c.kind === "percent" ? "text-right tabular-nums" : c.kind === "int" ? "text-center" : ""}`}>{r[c.key] === null && (c.key === "no") ? "" : formatCell(c.kind, r[c.key] ?? null)}</td>)}</tr>))
           : <tr><td colSpan={report.columns.length} className="py-6 text-center text-slate-500">Tidak ada data.</td></tr>}</tbody>
         {report.totals && <tfoot><tr>{report.columns.map((c) => <td key={c.key} className={c.kind === "money" || c.kind === "percent" ? "text-right tabular-nums" : ""}>{report.totals![c.key] === undefined || report.totals![c.key] === null ? "" : formatCell(c.kind, report.totals![c.key]!)}</td>)}</tr></tfoot>}
       </table>

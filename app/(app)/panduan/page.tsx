@@ -20,7 +20,7 @@ const FLOW: [string, string, string][] = [
   ["Siapkan dan impor anggaran", "Impor anggaran", "Klik Siapkan versi anggaran (sekali per tahun/tahapan), unduh template Excel, isi, lalu unggah (.xlsx maks. 5 MB). Klik Periksa file; bila ada baris bermasalah, perbaiki lalu unggah ulang. Setelah semua valid, klik Konfirmasi dan simpan."],
   ["Catat paket RUP dan alokasinya", "Paket RUP", "Tambah paket RUP, lalu buka paketnya dan alokasikan ke rekening anggaran. Sistem menolak alokasi yang melebihi pagu paket atau pagu rekening."],
   ["Buat paket pengadaan", "Paket pengadaan", "Isi kode, nama, pagu, metode, dan pejabat. Tautkan ke paket RUP, ubah status sesuai perkembangan, dan catat kontrak/SP bila sudah ada."],
-  ["Susun anggaran kas", "Anggaran kas", "Isi rencana kas per rekening per bulan. Peringatan membantu mendeteksi kas yang melebihi pagu atau belum selaras dengan jadwal paket."],
+  ["Susun anggaran kas", "Anggaran kas", "Rencana kas disusun per TRIWULAN (TW I-IV) untuk setiap Program, Kegiatan, Sub Kegiatan, dan Belanja. Isi manual pada tabel (tombol ÷4 membagi pagu rata), atau unggah file Excel/PDF lalu periksa pratinjau sebelum diterapkan. Peringatan membantu mendeteksi kas yang melebihi pagu atau belum selaras dengan jadwal paket."],
   ["Catat realisasi", "Realisasi", "Input transaksi (pembayaran/koreksi/pembatalan) berdasarkan dokumen. Admin kemudian memverifikasi. Koreksi dan pembatalan dicatat sebagai nilai negatif; transaksi terverifikasi tidak dapat diubah."],
   ["Cetak laporan", "Laporan & dokumen", "Cetak atau unduh Excel: rekap anggaran dan realisasi, daftar paket, rencana kas, transaksi, dan lainnya."],
 ];
@@ -39,6 +39,7 @@ const FAQ: [string, string][] = [
   ["Impor anggaran ditolak.", "Biasanya kode subkegiatan, rekening, sumber dana, atau NIP PPTK belum ada di master data, atau pagu bukan angka. Perbaiki sesuai tabel masalah, lalu unggah ulang."],
   ["Realisasi tidak sama dengan perkiraan.", "Periksa apakah masih ada transaksi belum diverifikasi. Hanya yang terverifikasi masuk perhitungan realisasi, sisa, dan persentase."],
   ["Salah mencatat transaksi yang sudah terverifikasi.", "Jangan diubah. Buat transaksi Koreksi atau Pembatalan agar jejak keuangan tetap utuh."],
+  ["Bagaimana mengunggah Anggaran Kas?", "Menu Anggaran kas > Unggah file. Paling akurat memakai template Excel (tombol Unduh template; berisi semua rekening anggaran, isi kolom tw1-tw4). PDF berbasis teks juga dapat dibaca otomatis, tetapi hasilnya selalu perlu diperiksa di pratinjau; PDF hasil scan tidak dapat dibaca."],
   ["Data tidak muncul.", "Pastikan tahun dan tahapan di bagian atas sudah benar, dan versi anggaran untuk periode itu sudah disiapkan."],
 ];
 
