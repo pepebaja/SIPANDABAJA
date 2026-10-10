@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   "users:manage": ["super_admin", "admin_opd"],
   "users:read": ["super_admin", "admin_opd", "auditor"],
   "settings:write": ["super_admin"],
+  "print-profile:write": ["super_admin", "admin_opd"],
   "budget-setup:write": ["super_admin", "admin_opd"],
   "budget:import": ["super_admin", "admin_opd", "ppbj"],
   "audit:read": ["super_admin", "admin_opd", "auditor"],

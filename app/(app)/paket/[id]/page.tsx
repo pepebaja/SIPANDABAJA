@@ -19,8 +19,8 @@ export default async function PackageDetail({ params, searchParams }: { params: 
   const name = new Map((st.data ?? []).map((s) => [s.code, s.name])), cur = st.data?.find((s) => s.code === p.status);
   return (
     <section className="max-w-4xl space-y-6">
-      <div><Link href="/paket" className="link text-sm">Kembali ke daftar paket</Link>
-        <h1 className="mt-1 text-2xl font-semibold text-navy-800">{p.name}</h1><p className="text-slate-600">{p.internal_code}, pagu {rp(p.pagu)}, {p.execution_mode === "swakelola" ? "swakelola" : "melalui penyedia"}</p></div>
+      <div><div className="flex flex-wrap items-center justify-between gap-2"><Link href="/paket" className="link text-sm">← Kembali ke daftar paket</Link><Link href={`/paket/${id}/cetak`} className="btn btn-ghost btn-sm">Cetak lembar rincian</Link></div>
+        <h1 className="page-title mt-1">{p.name}</h1><p className="text-slate-600">{p.internal_code}, pagu {rp(p.pagu)}, {p.execution_mode === "swakelola" ? "swakelola" : "melalui penyedia"}</p></div>
       {sp.error && <p role="alert" className="alert alert-error">Perubahan gagal disimpan. Anda mungkin tidak berwenang.</p>}
       <div className="space-y-2 card p-4"><h2 className="font-semibold">Status: {cur?.name ?? p.status}</h2>{cur && <p className="text-sm text-slate-600">{cur.definition}</p>}
         <form action={changeStatus} className="flex flex-wrap items-end gap-2"><input type="hidden" name="id" value={id} />

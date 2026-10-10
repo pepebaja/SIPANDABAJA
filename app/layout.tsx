@@ -7,7 +7,7 @@ const display = Space_Grotesk({ subsets: ["latin"], variable: "--font-display", 
 
 export const metadata: Metadata = {
   title: { default: "SIPANDABAJA", template: "%s | SIPANDABAJA" },
-  description: "SIPANDABAJA: sistem informasi pengelolaan anggaran dan pengadaan barang/jasa.",
+  description: "SIPANDABAJA: Sistem Informasi Pantau Data Pengadaan Barang dan Jasa.",
 };
 export const viewport: Viewport = { themeColor: "#0c1a3a" };
 

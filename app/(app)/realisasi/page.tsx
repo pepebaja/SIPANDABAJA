@@ -3,24 +3,22 @@ import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
 import { loadEntries } from "@/lib/server/entries";
 import { TransactionForm } from "@/components/transaction-form";
-import { derive, totals, type EntryRow } from "@/lib/realization";
+import { derive, totals } from "@/lib/realization";
 import { DOC_TYPES, KINDS } from "@/lib/transactions";
-import { parseRupiah } from "@/lib/import/parse";
 import { rp } from "@/lib/format";
+import { loadRealization } from "@/lib/server/realization-data";
 import { verifyTransaction } from "./actions";
 const PAGE = 25;
 export default async function RealisasiPage({ searchParams }: { searchParams: Promise<{ status?: string; page?: string; error?: string }> }) {
   const sp = await searchParams, ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p>Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
-  const sb = await createClient(), vid = ctx.versionId, m = (v: unknown) => parseRupiah(v) ?? "0.00";
+  const sb = await createClient(), vid = ctx.versionId;
   const status = sp.status === "verified" || sp.status === "unverified" ? sp.status : "", page = Math.max(1, Number(sp.page) || 1);
   let q = sb.from("transactions").select("id, budget_entry_id, kind, doc_type, doc_number, transaction_date, amount, verification_status", { count: "exact" })
     .eq("budget_version_id", vid).order("transaction_date", { ascending: false }).range((page - 1) * PAGE, page * PAGE - 1);
   if (status) q = q.eq("verification_status", status);
-  const [{ data: agg }, entries, { data: pk }, tx] = await Promise.all([sb.rpc("realization_by_entry", { p_version: vid }), loadEntries(sb, vid),
+  const [rows, entries, { data: pk }, tx] = await Promise.all([loadRealization(sb, vid), loadEntries(sb, vid),
     sb.from("procurement_packages").select("id, internal_code, name").eq("budget_version_id", vid).order("internal_code").limit(1000), q]);
-  const rows: EntryRow[] = ((agg ?? []) as { pagu: number; verified: number; unverified: number; tx_count: number; unverified_count: number }[])
-    .map((r) => ({ pagu: m(r.pagu), verified: m(r.verified), unverified: m(r.unverified), txCount: Number(r.tx_count), unverifiedCount: Number(r.unverified_count) }));
   const t = totals(rows), label = new Map(entries.map((e) => [e.id, e.label]));
   const pages = Math.max(1, Math.ceil((tx.count ?? 0) / PAGE)), href = (p: number, s = status) => `/realisasi?${new URLSearchParams({ ...(s ? { status: s } : {}), page: String(p) })}`;
   const cards: [string, string][] = [["Total pagu rekening", rp(t.pagu)], ["Realisasi terverifikasi", rp(t.verified)], ["Belum diverifikasi", rp(t.unverified)], ["Sisa pagu", rp(t.remaining)], ["Persentase realisasi", t.percent === null ? "N/A" : `${t.percent.replace(".", ",")}%`]];

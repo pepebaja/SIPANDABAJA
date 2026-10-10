@@ -2,30 +2,41 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
 import { totals } from "@/lib/realization";
+import { loadRealization } from "@/lib/server/realization-data";
 import { fillMonths } from "@/lib/dashboard";
-import { parseRupiah } from "@/lib/import/parse";
 import { rp } from "@/lib/format";
 import { MonthlyChart } from "@/components/monthly-chart";
+import { Icon, type IconName } from "@/components/icons";
+import { getSession } from "@/lib/server/session";
+import { can } from "@/lib/rbac";
+
+async function QuickLinks() {
+  const s = await getSession();
+  const items: [string, string, IconName][] = [["/laporan", "Laporan & dokumen", "printer"], ["/anggaran/impor", "Impor anggaran", "upload"], ["/panduan", "Panduan", "book"],
+    ...(s && can(s.roles, "print-profile:write") ? [["/pengaturan", "Pengaturan", "settings"] as [string, string, IconName]] : [])];
+  return <nav aria-label="Akses cepat" className="flex flex-wrap gap-2">{items.map(([h, l, i]) => <Link key={h} href={h} className="btn btn-ghost btn-sm"><Icon name={i} className="h-4 w-4" />{l}</Link>)}</nav>;
+}
 type Summary = { rup_count: number; pkg_processed: number; pkg_unprocessed: number; pkg_followup: number; result_total: number; contract_total: number; by_method: { name: string; count: number }[]; monthly: { month: number; verified: number }[] };
 export default async function Home() {
-  const ctx = await getBudgetContext(), sb = await createClient(), m = (v: unknown) => parseRupiah(v) ?? "0.00";
+  const ctx = await getBudgetContext(), sb = await createClient();
   if (!ctx?.versionId) return <section className="max-w-2xl space-y-2"><h1 className="page-title">Beranda</h1>
-    <p className="text-slate-600">Belum ada versi anggaran untuk tahun/tahapan ini. Siapkan di menu <Link className="link" href="/anggaran/impor">Impor anggaran</Link>.</p></section>;
-  const [{ data: s, error }, { data: agg }] = await Promise.all([sb.rpc("dashboard_summary", { p_version: ctx.versionId }), sb.rpc("realization_by_entry", { p_version: ctx.versionId })]);
+    <p className="text-slate-600">Belum ada versi anggaran untuk tahun/tahapan ini. Siapkan di menu <Link className="link" href="/anggaran/impor">Impor anggaran</Link>.</p><QuickLinks /></section>;
+  const [{ data: s, error }, real] = await Promise.all([sb.rpc("dashboard_summary", { p_version: ctx.versionId }), loadRealization(sb, ctx.versionId)]);
   if (error || !s) return <p role="alert" className="alert alert-error">Dashboard tidak dapat dimuat. Muat ulang halaman.</p>;
   const d = s as Summary;
-  const t = totals(((agg ?? []) as { pagu: number; verified: number; unverified: number; tx_count: number; unverified_count: number }[]).map((r) => ({ pagu: m(r.pagu), verified: m(r.verified), unverified: m(r.unverified), txCount: Number(r.tx_count), unverifiedCount: Number(r.unverified_count) })));
+  const t = totals(real);
   const pct = t.percent === null ? null : Math.min(100, Math.max(0, Number(t.percent)));
   const hero: [string, string, string][] = [
     ["Total pagu anggaran", rp(t.pagu), "/realisasi"], ["Realisasi terverifikasi", rp(t.verified), "/realisasi?status=verified"], ["Sisa anggaran", rp(t.remaining), "/realisasi"]];
   const cards: [string, string, string][] = [
-    ["Paket RUP", String(d.rup_count), "/rup"], ["Paket sudah diproses", String(d.pkg_processed), "/paket"], ["Paket belum diproses", String(d.pkg_unprocessed), "/paket"],
-    ["Nilai hasil pemilihan", rp(d.result_total), "/paket"], ["Nilai kontrak/SP", rp(d.contract_total), "/paket"], ["Perlu tindak lanjut", String(d.pkg_followup), "/paket"]];
+    ["Paket RUP", String(d.rup_count), "/rup"], ["Paket sudah diproses", String(d.pkg_processed), "/paket?kelompok=sudah_diproses"], ["Paket belum diproses", String(d.pkg_unprocessed), "/paket?kelompok=belum_diproses"],
+    ["Nilai hasil pemilihan", rp(d.result_total), "/paket"], ["Nilai kontrak/SP", rp(d.contract_total), "/paket"], ["Perlu tindak lanjut", String(d.pkg_followup), "/paket?filter=tindak-lanjut"]];
   return (
     <section className="max-w-7xl space-y-6">
       <div><p className="eyebrow">Ringkasan</p>
         <h1 className="page-title">Dashboard <span className="page-sub">Tahun {ctx.year} · {ctx.stageName}</span></h1>
         <p className="page-desc">Diperbarui {new Date().toLocaleString("id-ID")}. Sumber: data yang dicatat di aplikasi ini. Realisasi hanya dari transaksi terverifikasi{t.unverifiedCount > 0 ? `; ${t.unverifiedCount} transaksi belum diverifikasi (${rp(t.unverified)}) tidak ikut dihitung` : ""}.</p></div>
+      <QuickLinks />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {hero.map(([k, v, h], i) => <Link key={k} href={h} className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-800 to-navy-950 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-glow">
           <span className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-cyan-400/20 blur-2xl" aria-hidden="true" />

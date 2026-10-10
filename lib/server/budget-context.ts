@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { CONTEXT_COOKIE, decodeContext } from "@/lib/context";
+import { CONTEXT_COOKIE, decodeContext, pickYear } from "@/lib/context";
 export type ActiveContext = { year: number; yearId: string; stageId: string; stageName: string; versionId: string | null };
 /** Konteks tahun/tahapan aktif + versi anggaran terbaru (divalidasi lewat RLS). */
 export async function getBudgetContext(): Promise<ActiveContext | null> {
@@ -9,7 +9,7 @@ export async function getBudgetContext(): Promise<ActiveContext | null> {
   const [{ data: years }, { data: stages }] = await Promise.all([
     sb.from("budget_years").select("id, year").eq("is_active", true).order("year"),
     sb.from("budget_stages").select("id, name").eq("is_active", true).order("sort_order")]);
-  const y = years?.find((r) => r.id === saved?.yearId) ?? years?.[0];
+  const y = pickYear(years ?? [], saved?.yearId);
   const s = stages?.find((r) => r.id === saved?.stageId) ?? stages?.[0];
   if (!y || !s) return null;
   const { data: v } = await sb.from("budget_versions").select("id").eq("budget_year_id", y.id).eq("budget_stage_id", s.id)

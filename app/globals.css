@@ -101,3 +101,23 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ===== Dokumen cetak ===== */
+.report-sheet table { display: table; border-collapse: collapse; font-size: 0.8125rem; white-space: normal; }
+.report-sheet thead { display: table-header-group; }
+.report-sheet thead th { background: #e2e8f0; color: #0f172a; text-transform: none; letter-spacing: 0; font-size: 0.75rem; border: 1px solid #94a3b8; border-radius: 0 !important; padding: 0.4rem 0.5rem; white-space: normal; }
+.report-sheet tbody td, .report-sheet tfoot td { border: 1px solid #cbd5e1; padding: 0.3rem 0.5rem; vertical-align: top; }
+.report-sheet tbody tr:hover { background: transparent; }
+.report-sheet tr { break-inside: avoid; }
+.report-sheet tfoot td { background: #f1f5f9; font-weight: 700; border-color: #94a3b8; }
+.report-sheet .kv { display: grid; grid-template-columns: 11rem 1fr; gap: 0.25rem 1rem; font-size: 0.875rem; }
+.report-sheet .kv dt { color: #475569; }
+.report-sheet h3 { font-family: var(--font-display), sans-serif; font-size: 0.95rem; font-weight: 700; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid #cbd5e1; padding-bottom: 0.25rem; }
+.report-sheet .field-line { border-bottom: 1px dotted #475569; min-height: 1.6rem; }
+@media print {
+  html, body { background: #fff !important; }
+  body { background-image: none !important; font-size: 12px; }
+  .no-print { display: none !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  a { color: inherit; text-decoration: none; }
+}

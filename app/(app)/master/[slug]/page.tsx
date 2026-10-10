@@ -22,7 +22,7 @@ export default async function MasterPage({ params, searchParams }: { params: Pro
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE)), href = (p: number) => `/master/${def.slug}?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) })}`;
   return (
     <section className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-      <div className="space-y-3"><div><Link href="/master" className="link text-sm">← Master data</Link><h1 className="page-title mt-1">{def.title}</h1></div>
+      <div className="space-y-3"><div className="flex flex-wrap items-end justify-between gap-2"><div><Link href="/master" className="link text-sm">← Master data</Link><h1 className="page-title mt-1">{def.title}</h1></div><a href={`/api/ekspor/master/${def.slug}`} className="btn btn-ghost btn-sm">Unduh Excel</a></div>
         <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Cari nama" className="w-64" /><button className="btn btn-primary">Cari</button></form>
         {error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !data?.length ? <p className="text-slate-600">{q ? "Tidak ada yang cocok." : "Belum ada data. Tambahkan lewat formulir."}</p> : (
           <div className="table-wrap"><table><thead><tr>{def.fields.map((f) => <th key={f.name}>{f.label}</th>)}<th>Status</th><th>Aksi</th></tr></thead>
