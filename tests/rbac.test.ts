@@ -17,3 +17,12 @@ describe("context", () => {
   it("round-trip", () => expect(decodeContext(encodeContext(a, b))).toEqual({ yearId: a, stageId: b }));
   it("menolak nilai rusak", () => expect(decodeContext("x:y")).toBeNull());
 });
+
+import { can as canNow } from "@/lib/rbac";
+describe("profil cetak (kop & pejabat)", () => {
+  it("Super Admin dan Admin OPD dapat mengubah; peran lain tidak", () => {
+    expect(canNow(["super_admin"], "print-profile:write")).toBe(true);
+    expect(canNow(["admin_opd"], "print-profile:write")).toBe(true);
+    for (const r of ["ppbj", "ppk", "pptk", "viewer", "auditor"] as const) expect(canNow([r], "print-profile:write")).toBe(false);
+  });
+});

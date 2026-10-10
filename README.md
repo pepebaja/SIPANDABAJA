@@ -1,6 +1,6 @@
 # SIPANDABAJA
 
-Sistem informasi pengelolaan anggaran dan pengadaan barang/jasa. Next.js 15 + Supabase.
+**Sistem Informasi Pantau Data Pengadaan Barang dan Jasa.** Next.js 15 + Supabase.
 Masuk memakai **username** (bukan email).
 
 ## Pemasangan (sekali saja)
@@ -19,6 +19,16 @@ Masuk memakai **username** (bukan email).
 Alternatif tanpa halaman setup (CLI):
 `node --env-file=.env.local scripts/create-user.mjs <username> "<Password>" "<Nama Lengkap>" super_admin`
 
+## Memastikan versi terbaru sudah aktif
+
+Versi aplikasi tampil kecil di kiri bawah sidebar dan di bawah formulir login (mis. `v1.2.0 · a1b2c3d`; kode di belakangnya adalah commit GitHub).
+Bila menu yang diharapkan belum muncul, cek angka itu. Bila lebih lama, buka Vercel > Deployments dan pastikan deploy terbaru berstatus **Ready**
+(bila **Error**, buka log build-nya), lalu muat ulang browser dengan Ctrl+F5.
+
+## Tahun dan tahapan anggaran
+
+Dipilih saat masuk (halaman login) dan menjadi konteks seluruh aplikasi. Dapat diganti kapan saja lewat pilihan di bagian atas aplikasi.
+
 ## Pengelolaan akun
 
 - Menu **Pengguna** (Super Admin / Admin OPD): buat akun, ubah nama/NIP/peran, reset password, aktif/nonaktifkan.
@@ -28,6 +38,15 @@ Alternatif tanpa halaman setup (CLI):
 - Aturan password: minimal 10 karakter, ada huruf besar, huruf kecil, dan angka; tidak memuat username/kata umum.
 - Admin OPD tidak dapat membuat/mengubah akun Super Admin atau Admin OPD lain. Super Admin aktif terakhir tidak dapat dinonaktifkan.
 - Percobaan masuk dibatasi (5 gagal/username dan 20 gagal/IP per 15 menit).
+
+## Laporan dan dokumen cetak
+
+Menu **Laporan & dokumen** menyediakan laporan yang dapat dicetak (kop surat + tanda tangan otomatis) atau diunduh sebagai Excel:
+rekap anggaran dan realisasi, daftar paket pengadaan, daftar paket RUP, rencana anggaran kas, daftar transaksi, daftar pengguna, dan log audit.
+Dokumen lain: Panduan pengguna, Formulir permohonan akun, Lembar rincian paket (dari halaman detail paket), template impor anggaran,
+serta unduhan Excel tiap master data. Untuk PDF, pilih "Simpan sebagai PDF" pada dialog cetak browser.
+
+Super Admin atau Admin OPD mengisi nama OPD, alamat, kota, dan pejabat penandatangan di menu **Pengaturan** (dipakai pada kop dan tanda tangan semua dokumen).
 
 ## Pengembangan
 

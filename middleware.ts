@@ -23,4 +23,5 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/akun?wajib=1", req.url));
   return res;
 }
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };
+export const config = { // Berkas gambar statis (logo, ikon) harus dapat dimuat sebelum login.
+matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|webp|svg|ico|gif)$).*)"] };
