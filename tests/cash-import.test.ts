@@ -69,3 +69,13 @@ describe("unggah PDF", () => {
   it("pickWindow: kolom jumlah di akhir", () => expect(pickWindow(["10.00", "20.00", "30.00", "40.00", "100.00"], 4)).toEqual(["10.00", "20.00", "30.00", "40.00"]));
   it("tanpa konteks subkegiatan: rekening unik tetap terbaca", () => expect(parseCashPdfLines(["5.1.01.01.01.0001 Gaji 1,00 2,00 3,00 4,00"], idx).valid[0]!.entry_id).toBe("e1"));
 });
+
+describe("format nominal pada template kas", () => {
+  const row = (v: unknown) => ({ _row: 2, kode_subkegiatan: "1.01.02.2.01.0001", kode_rekening: "5.1.01.01.01.0001", kode_sumber_dana: "DAU", uraian: "Gaji Pokok ASN", tw1: v });
+  it.each([["Rp. 1.000.000", "1000000.00"], ["1.000.000,-", "1000000.00"], ["1,000,000.00", "1000000.00"], [1000000, "1000000.00"], ["-", "0.00"], ["\u2013", "0.00"]])("tw1 %s diterima", (v, o) => {
+    const r = validateCashRows([row(v)], idx); expect(r.errors).toEqual([]); expect(r.valid[0]?.q[0]).toBe(o);
+  });
+  it("sel galat Excel dilaporkan dengan jelas, bukan [object Object]", () => {
+    const r = validateCashRows([row("#REF!")], idx); expect(r.errors[0]?.message).toContain("#REF!");
+  });
+});

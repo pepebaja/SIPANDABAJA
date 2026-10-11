@@ -5,6 +5,8 @@ import { getBudgetContext } from "@/lib/server/budget-context";
 import { readFirstSheet } from "@/lib/import/xlsx";
 import { sha256 } from "@/lib/import/hash";
 import { validateBudgetRows, type Masters, type RowError } from "@/lib/import/budget";
+import { getSession } from "@/lib/server/session";
+import { can } from "@/lib/rbac";
 
 export type ImportState = { error?: string; jobId?: string; fileName?: string; total?: number; ok?: number; failed?: number; errors?: RowError[]; confirmed?: number };
 const MAX_BYTES = 5 * 1024 * 1024, MAX_ROWS = 5000;
@@ -69,4 +71,21 @@ export async function confirmBudgetImport(_prev: ImportState, fd: FormData): Pro
   if (error) return { error: error.message };
   revalidatePath("/anggaran/impor");
   return { confirmed: data as number };
+}
+
+// ---------- hapus riwayat impor yang belum dikonfirmasi ----------
+const UUID = /^[0-9a-f-]{36}$/i;
+/** Menghapus satu riwayat impor berstatus belum dikonfirmasi. Yang sudah dikonfirmasi ditolak oleh aplikasi dan oleh kebijakan database. */
+export async function deleteImportJob(fd: FormData): Promise<void> {
+  const s = await getSession(); if (!s || !can(s.roles, "budget:import")) return;
+  const id = String(fd.get("jobId") ?? ""); if (!UUID.test(id)) return;
+  await (await createClient()).from("import_jobs").delete().eq("id", id).neq("status", "confirmed");
+  revalidatePath("/anggaran/impor");
+}
+/** Menghapus semua riwayat impor yang belum dikonfirmasi pada tahun/tahapan yang sedang dipilih. */
+export async function deleteUnconfirmedImports(): Promise<void> {
+  const s = await getSession(); if (!s || !can(s.roles, "budget:import")) return;
+  const ctx = await getBudgetContext(); if (!ctx?.versionId) return;
+  await (await createClient()).from("import_jobs").delete().eq("budget_version_id", ctx.versionId).neq("status", "confirmed");
+  revalidatePath("/anggaran/impor");
 }

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ContractForm } from "@/components/contract-form";
 import { rp } from "@/lib/format";
 import { changeStatus, linkRup } from "./actions";
+import { fmtDateTime } from "@/lib/date";
 const DOC: Record<string, string> = { kontrak: "Kontrak", spk: "SPK", surat_pesanan: "Surat Pesanan" };
 export default async function PackageDetail({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { id } = await params, sp = await searchParams, sb = await createClient();
@@ -26,7 +27,7 @@ export default async function PackageDetail({ params, searchParams }: { params: 
         <form action={changeStatus} className="flex flex-wrap items-end gap-2"><input type="hidden" name="id" value={id} />
           <label className="text-sm font-medium">Ubah status<select name="status" defaultValue={p.status} className="ml-2 py-1.5">{st.data?.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
           <button className="btn btn-dark btn-sm">Simpan status</button></form>
-        {!!ev.data?.length && <ul className="mt-2 text-sm text-slate-700">{ev.data.map((e) => <li key={e.id}>{new Date(e.created_at).toLocaleString("id-ID")}: {e.from_status ? `${name.get(e.from_status) ?? e.from_status} menjadi ` : "dibuat sebagai "}{name.get(e.to_status) ?? e.to_status}</li>)}</ul>}</div>
+        {!!ev.data?.length && <ul className="mt-2 text-sm text-slate-700">{ev.data.map((e) => <li key={e.id}>{fmtDateTime(e.created_at)}: {e.from_status ? `${name.get(e.from_status) ?? e.from_status} menjadi ` : "dibuat sebagai "}{name.get(e.to_status) ?? e.to_status}</li>)}</ul>}</div>
       <form action={linkRup} className="flex flex-wrap items-end gap-2 card p-4"><input type="hidden" name="id" value={id} />
         <label className="text-sm font-medium">Tautkan ke paket RUP<select name="rup_package_id" defaultValue={p.rup_package_id ?? ""} className="ml-2 py-1.5"><option value="">(belum ada kode RUP)</option>{rups.data?.map((r) => <option key={r.id} value={r.id}>{r.rup_code} {r.name}</option>)}</select></label>
         <button className="btn btn-dark btn-sm">Simpan tautan</button></form>

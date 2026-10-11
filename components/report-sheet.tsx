@@ -1,5 +1,5 @@
 import type { PrintProfile } from "@/lib/settings";
-import { todayLong } from "@/lib/date";
+import { nowWib, todayLong } from "@/lib/date";
 import { formatCell, type Report } from "@/lib/report-types";
 
 export type Printer = { name: string; nip: string | null; role: string };
@@ -26,7 +26,7 @@ export function Sheet({ profile, title, subtitle, orientation = "portrait", prin
             <div className="text-center"><p>{profile.city || dots}, {todayLong()}</p><p>Mengetahui,</p><p className="text-slate-700">{profile.headTitle || "Kepala"}</p><div className="h-20" />
               <p className="font-semibold underline">{profile.headName || dots}</p><p>NIP {profile.headNip || dots}</p></div>
           </footer>)}
-        <p className="mt-6 text-[0.7rem] text-slate-500">Dicetak dari SIPANDABAJA pada {new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} oleh {printer.name}.</p>
+        <p className="mt-6 text-[0.7rem] text-slate-500">Dicetak dari SIPANDABAJA pada {nowWib()} oleh {printer.name}.</p>
       </article>
     </>
   );

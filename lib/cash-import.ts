@@ -12,6 +12,8 @@ export const CASH_TEMPLATE_COLUMNS = ["kode_program", "kode_kegiatan", "kode_sub
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 const alnum = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const str = (v: unknown) => String(v ?? "").trim();
+/** Tanda strip (-, –, —) lazim dipakai dokumen keuangan untuk nilai nol. */
+const parseQuarter = (v: unknown) => (/^[-\u2013\u2014]+$/.test(str(v)) ? "0.00" : parseRupiah(v));
 export const entryLabel = (e: EntryRef) => `${e.sub} / ${e.acc}: ${e.desc}`;
 
 export type EntryIndex = { all: EntryRef[]; bySubAcc: Map<string, EntryRef[]>; byAcc: Map<string, EntryRef[]>; subs: Set<string>; accs: Set<string> };
@@ -49,7 +51,7 @@ function readQuarters(r: Record<string, unknown>): { q: Quarters; error?: { fiel
   for (let i = 0; i < 4; i++) {
     const direct = get(TW_ALIASES[i]!);
     if (direct) {
-      const n = parseRupiah(direct.v);
+      const n = parseQuarter(direct.v);
       if (n === null) return { q, error: { field: direct.field, message: `Format angka tidak valid: "${str(direct.v)}"` } };
       if (n.startsWith("-")) return { q, error: { field: direct.field, message: "Nilai kas tidak boleh negatif" } };
       q[i] = n; continue;
@@ -57,7 +59,7 @@ function readQuarters(r: Record<string, unknown>): { q: Quarters; error?: { fiel
     let sum = 0n, any = false;
     for (let m = i * 3; m < i * 3 + 3; m++) {
       const h = get(MONTH_ALIASES[m]!); if (!h) continue;
-      const n = parseRupiah(h.v);
+      const n = parseQuarter(h.v);
       if (n === null) return { q, error: { field: h.field, message: `Format angka tidak valid: "${str(h.v)}"` } };
       if (n.startsWith("-")) return { q, error: { field: h.field, message: "Nilai kas tidak boleh negatif" } };
       sum += toCents(n); any = true;

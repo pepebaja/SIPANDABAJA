@@ -2,6 +2,7 @@ import "server-only";
 import ExcelJS from "exceljs";
 import type { Report } from "@/lib/report-types";
 import type { PrintProfile } from "@/lib/settings";
+import { nowWib } from "@/lib/date";
 
 const NAVY = "FF0C1A3A", BORDER = { style: "thin" as const, color: { argb: "FF94A3B8" } };
 const box = { top: BORDER, left: BORDER, bottom: BORDER, right: BORDER };
@@ -37,7 +38,7 @@ export async function reportToXlsx(r: Report, profile: PrintProfile, printedBy: 
   let row = last + 2;
   for (const note of r.notes ?? []) { ws.mergeCells(row, 1, row, n); ws.getCell(row, 1).value = `Catatan: ${note}`; ws.getCell(row, 1).font = { italic: true, size: 10, color: { argb: "FF475569" } }; row++; }
   ws.mergeCells(row + 1, 1, row + 1, n);
-  ws.getCell(row + 1, 1).value = `Dicetak dari SIPANDABAJA pada ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} oleh ${printedBy}`;
+  ws.getCell(row + 1, 1).value = `Dicetak dari SIPANDABAJA pada ${nowWib()} oleh ${printedBy}`;
   ws.getCell(row + 1, 1).font = { size: 9, color: { argb: "FF64748B" } };
   return wb.xlsx.writeBuffer();
 }

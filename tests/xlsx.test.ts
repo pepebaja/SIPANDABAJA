@@ -27,3 +27,13 @@ describe("ekspor Excel", () => {
     expect(ws.views[0]).toMatchObject({ state: "frozen", ySplit: 5 });
   });
 });
+
+describe("sel formula/galat", () => {
+  it("memakai hasil formula, dan sel galat/tanpa hasil tidak menjadi [object Object]", async () => {
+    const ExcelJS = (await import("exceljs")).default, { readFirstSheet } = await import("@/lib/import/xlsx");
+    const wb = new ExcelJS.Workbook(), ws = wb.addWorksheet("x");
+    ws.addRow(["a", "b", "c"]); ws.addRow([{ formula: "1+1", result: 2 }, { formula: "1/0", result: { error: "#DIV/0!" } }, { formula: "A1+1" }]);
+    const rows = await readFirstSheet((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+    expect(rows[0]).toMatchObject({ a: 2, b: "#DIV/0!", c: "" });
+  });
+});

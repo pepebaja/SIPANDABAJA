@@ -9,6 +9,7 @@ import { MonthlyChart } from "@/components/monthly-chart";
 import { Icon, type IconName } from "@/components/icons";
 import { getSession } from "@/lib/server/session";
 import { can } from "@/lib/rbac";
+import { nowWib } from "@/lib/date";
 
 async function QuickLinks() {
   const s = await getSession();
@@ -35,7 +36,7 @@ export default async function Home() {
     <section className="max-w-7xl space-y-6">
       <div><p className="eyebrow">Ringkasan</p>
         <h1 className="page-title">Dashboard <span className="page-sub">Tahun {ctx.year} · {ctx.stageName}</span></h1>
-        <p className="page-desc">Diperbarui {new Date().toLocaleString("id-ID")}. Sumber: data yang dicatat di aplikasi ini. Realisasi hanya dari transaksi terverifikasi{t.unverifiedCount > 0 ? `; ${t.unverifiedCount} transaksi belum diverifikasi (${rp(t.unverified)}) tidak ikut dihitung` : ""}.</p></div>
+        <p className="page-desc">Diperbarui {nowWib()}. Sumber: data yang dicatat di aplikasi ini. Realisasi hanya dari transaksi terverifikasi{t.unverifiedCount > 0 ? `; ${t.unverifiedCount} transaksi belum diverifikasi (${rp(t.unverified)}) tidak ikut dihitung` : ""}.</p></div>
       <QuickLinks />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {hero.map(([k, v, h], i) => <Link key={k} href={h} className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-800 to-navy-950 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-glow">
