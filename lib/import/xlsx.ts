@@ -29,3 +29,19 @@ export async function readFirstSheet(buf: ArrayBuffer): Promise<SheetRow[]> {
   });
   return rows;
 }
+
+export type MatrixRow = { n: number; cells: unknown[] };
+/** Membaca worksheet pertama apa adanya (tanpa menganggap baris 1 sebagai header). cells[i] = isi kolom ke-i (1-based; indeks 0 kosong). */
+export async function readFirstSheetMatrix(buf: ArrayBuffer): Promise<MatrixRow[]> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.worksheets[0];
+  if (!ws) return [];
+  const out: MatrixRow[] = [];
+  ws.eachRow((row, n) => {
+    const cells: unknown[] = [];
+    row.eachCell((c, i) => { cells[i] = cellValue(c.value); });
+    out.push({ n, cells });
+  });
+  return out;
+}

@@ -12,3 +12,5 @@ export const percent = (part: string, whole: string): string | null => {
   const w = toCents(whole); if (w === 0n) return null;
   return fromCents((toCents(part) * 10000n) / w);
 };
+/** Jumlah beberapa nilai rupiah (string desimal) dalam sen. */
+export const sumCents = (xs: string[]): bigint => xs.reduce((s, x) => s + toCents(x), 0n);

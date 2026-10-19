@@ -47,6 +47,18 @@ Menu **Anggaran kas** menyusun rencana kas per **triwulan (TW I-IV)** untuk seti
   PDF berbasis teks dibaca otomatis (best-effort; cocokkan kode sub kegiatan dan rekening dengan anggaran). PDF hasil scan tidak didukung.
 - **Wajib** menjalankan migrasi `supabase/migrations/20260107000000_cash_quarterly.sql` (mengubah kolom bulan menjadi triwulan; data bulanan lama digabung otomatis).
 
+## Paket RUP (sinkronisasi SIRUP dan input manual)
+
+Menu **Paket RUP** dapat diisi dan diperbarui dengan dua cara, dan keduanya boleh dipakai bergantian saat anggaran bergeser atau berubah sehingga RUP ikut disesuaikan:
+- **Unggah file RUP dari SIRUP** (`.xlsx`): berkas ekspor SIRUP (kolom ID, Paket, Pagu (Rp), Jenis Pengadaan, Metode Pemilihan) dibaca langsung; judul di atas tabel dilewati otomatis. Template sendiri tersedia di menu.
+  Pencocokan memakai **kode RUP**: kode baru *ditambah*, kode yang sama *diubah* bila nama/jenis/metode/pagu berbeda, dan yang isinya sama tidak disentuh.
+  Sistem menampilkan pratinjau perubahan; **tidak ada yang tersimpan sebelum menekan Terapkan** (atomik, satu transaksi). Opsi tambahan: *hapus paket yang tidak ada di file* (hanya bila seluruh baris valid) dan *terapkan hanya baris valid*.
+  File yang sama tidak dapat diterapkan dua kali; riwayat unggahan tampil di halaman Paket RUP.
+- **Input manual**: tambah lewat formulir, **ubah** dan **hapus** lewat halaman detail paket (atau tombol di daftar).
+
+Catatan perilaku: menghapus paket RUP ikut menghapus alokasi rekeningnya (tercatat di log audit), sedangkan paket pengadaan yang bertaut tidak dihapus, hanya tautan RUP-nya dikosongkan. Bila pagu diturunkan di bawah total alokasi, perubahan tetap diterima tetapi diberi peringatan agar alokasi disesuaikan.
+Hak ubah: Super Admin, Admin OPD, dan PPBJ. **Wajib** menjalankan migrasi `supabase/migrations/20260109000000_rup_sync.sql`.
+
 ## Laporan dan dokumen cetak
 
 Menu **Laporan & dokumen** menyediakan laporan yang dapat dicetak (kop surat + tanda tangan otomatis) atau diunduh sebagai Excel:
