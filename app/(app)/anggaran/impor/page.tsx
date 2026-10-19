@@ -26,7 +26,7 @@ export default async function ImportPage() {
         {canImport && jobs?.some((j) => j.status !== "confirmed") && (
           <form action={deleteUnconfirmedImports}><ConfirmButton className="btn btn-danger btn-sm" message="Hapus SEMUA riwayat impor yang belum dikonfirmasi? Data anggaran yang sudah tersimpan tidak terpengaruh.">Hapus semua yang belum dikonfirmasi</ConfirmButton></form>)}</div>
         {jobs?.length ? <div className="table-wrap"><table><thead><tr><th>File</th><th>Jenis</th><th>Status</th><th>Valid</th><th>Bermasalah</th><th>Waktu</th>{canImport && <th>Aksi</th>}</tr></thead>
-          <tbody>{jobs.map((j) => <tr key={j.id}><td>{j.file_name}</td><td>{j.kind === "cash_plans" ? "Anggaran kas" : "Anggaran"}</td>
+          <tbody>{jobs.map((j) => <tr key={j.id}><td>{j.file_name}</td><td>{j.kind === "cash_plans" ? "Anggaran kas" : j.kind === "rup_packages" ? "Paket RUP" : "Anggaran"}</td>
             <td>{j.status === "confirmed" ? "Dikonfirmasi" : "Menunggu konfirmasi"}</td><td>{j.ok_rows}</td><td>{j.error_rows}</td><td className="whitespace-nowrap">{fmtDateTime(j.created_at)}</td>
             {canImport && <td>{j.status === "confirmed" ? <span className="text-xs text-slate-500">Tersimpan sebagai arsip</span>
               : <form action={deleteImportJob}><input type="hidden" name="jobId" value={j.id} /><ConfirmButton className="btn btn-danger btn-sm" message={`Hapus riwayat impor "${j.file_name}"?`}>Hapus</ConfirmButton></form>}</td>}</tr>)}</tbody></table></div>
