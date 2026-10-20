@@ -12,6 +12,7 @@ const TERMS: [string, string][] = [
   ["Paket RUP", "Paket dalam Rencana Umum Pengadaan. Satu paket dapat memakai beberapa rekening, dan satu rekening dapat membiayai beberapa paket (alokasi)."],
   ["Paket pengadaan", "Paket yang dikelola proses pengadaannya: metode, pejabat, status, dan jadwal."],
   ["Kontrak/SP", "Kontrak, SPK, atau Surat Pesanan. Nilainya adalah komitmen, BUKAN realisasi keuangan."],
+  ["Anggaran kas kumulatif", "Sisa kas triwulan sebelumnya dapat dipakai pada triwulan berikutnya; kas triwulan yang akan datang tidak dapat dipakai untuk belanja triwulan sebelumnya. Triwulan ditentukan dari tanggal transaksi."],
   ["Realisasi", "Belanja yang benar-benar dicatat lewat transaksi dan sudah terverifikasi. Hanya transaksi terverifikasi yang dihitung."],
 ];
 const FLOW: [string, string, string][] = [
@@ -20,9 +21,9 @@ const FLOW: [string, string, string][] = [
   ["Siapkan dan impor anggaran", "Impor anggaran", "Klik Siapkan versi anggaran (sekali per tahun/tahapan), unduh template Excel, isi, lalu unggah (.xlsx maks. 5 MB). Klik Periksa file; bila ada baris bermasalah, perbaiki lalu unggah ulang. Setelah semua valid, klik Konfirmasi dan simpan."],
   ["Isi atau perbarui paket RUP", "Paket RUP", "Unggah file RUP dari SIRUP (kode baru ditambah, kode yang sama diperbarui; periksa pratinjau lalu Terapkan) dan/atau tambah, ubah, hapus manual saat anggaran bergeser sehingga RUP berubah."],
   ["Alokasikan paket RUP ke rekening", "Paket RUP", "Buka paket RUP, lalu alokasikan ke rekening anggaran. Sistem menolak alokasi yang melebihi pagu paket atau pagu rekening."],
-  ["Buat paket pengadaan", "Paket pengadaan", "Isi kode, nama, pagu, metode, dan pejabat. Tautkan ke paket RUP, ubah status sesuai perkembangan, dan catat kontrak/SP bila sudah ada."],
+  ["Kelola proses pengadaan (opsional)", "Input Realisasi, lalu tautan Proses pengadaan", "Isi kode, nama, pagu, metode, dan pejabat. Tautkan ke paket RUP, ubah status sesuai perkembangan, dan catat kontrak/SP bila sudah ada."],
   ["Susun anggaran kas", "Anggaran kas", "Rencana kas disusun per TRIWULAN (TW I-IV) untuk setiap Program, Kegiatan, Sub Kegiatan, dan Belanja. Isi manual pada tabel (tombol ÷4 membagi pagu rata), atau unggah file Excel/PDF lalu periksa pratinjau sebelum diterapkan. Peringatan membantu mendeteksi kas yang melebihi pagu atau belum selaras dengan jadwal paket."],
-  ["Catat realisasi", "Realisasi", "Input transaksi (pembayaran/koreksi/pembatalan) berdasarkan dokumen. Admin kemudian memverifikasi. Koreksi dan pembatalan dicatat sebagai nilai negatif; transaksi terverifikasi tidak dapat diubah."],
+  ["Catat realisasi", "Input Realisasi", "Pilih kode RUP (opsional) dan rekening dari arsip anggaran, isi tanggal dan nilai. Layar menampilkan program, kegiatan, sub kegiatan, sumber dana, PPTK, sisa pagu rekening, sisa pagu RUP, dan sisa anggaran kas kumulatif. Satu kode RUP boleh dicatat berulang. Pembayaran yang melebihi sisa pagu atau sisa kas kumulatif ditolak; kas triwulan berikutnya tidak dapat dipakai lebih awal. Admin kemudian memverifikasi; koreksi/pembatalan mengembalikan sisa."],
   ["Cetak laporan", "Laporan & dokumen", "Cetak atau unduh Excel: rekap anggaran dan realisasi, daftar paket, rencana kas, transaksi, dan lainnya."],
 ];
 const MATRIX: [string, Role[]][] = [

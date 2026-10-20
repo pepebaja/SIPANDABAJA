@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const s = stages?.find((r) => r.id === saved?.stageId) ?? stages?.[0];
   const groups: NavGroup[] = [
     { title: "Utama", items: [{ href: "/", label: "Beranda", icon: "home" }, { href: "/anggaran/impor", label: "Impor anggaran", icon: "upload" }, { href: "/rup", label: "Paket RUP", icon: "file" },
-      { href: "/paket", label: "Paket pengadaan", icon: "package" }, { href: "/kas", label: "Anggaran kas", icon: "wallet" }, { href: "/realisasi", label: "Realisasi", icon: "chart" }, { href: "/laporan", label: "Laporan & dokumen", icon: "printer" }] },
+      { href: "/kas", label: "Anggaran kas", icon: "wallet" }, { href: "/realisasi", label: "Input Realisasi", icon: "chart", also: ["/paket"] }, { href: "/laporan", label: "Laporan & dokumen", icon: "printer" }] },
     { title: "Pengelolaan", items: [{ href: "/master", label: "Master data", icon: "database" },
       ...(session && can(session.roles, "users:read") ? [{ href: "/pengguna", label: "Pengguna", icon: "users" as const }] : []),
       ...(session && can(session.roles, "audit:read") ? [{ href: "/audit", label: "Log audit", icon: "clipboard" as const }] : []),

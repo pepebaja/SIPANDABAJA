@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
-import { loadEntries } from "@/lib/server/entries";
+import { getSession } from "@/lib/server/session";
+import { can } from "@/lib/rbac";
+import { loadRealizationForm } from "@/lib/server/realization-form-data";
 import { TransactionForm } from "@/components/transaction-form";
 import { derive, totals } from "@/lib/realization";
 import { DOC_TYPES, KINDS } from "@/lib/transactions";
@@ -14,27 +16,28 @@ export default async function RealisasiPage({ searchParams }: { searchParams: Pr
   if (!ctx?.versionId) return <p>Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
   const sb = await createClient(), vid = ctx.versionId;
   const status = sp.status === "verified" || sp.status === "unverified" ? sp.status : "", page = Math.max(1, Number(sp.page) || 1);
-  let q = sb.from("transactions").select("id, budget_entry_id, kind, doc_type, doc_number, transaction_date, amount, verification_status", { count: "exact" })
+  let q = sb.from("transactions").select("id, budget_entry_id, rup_package_id, kind, doc_type, doc_number, transaction_date, amount, verification_status", { count: "exact" })
     .eq("budget_version_id", vid).order("transaction_date", { ascending: false }).range((page - 1) * PAGE, page * PAGE - 1);
   if (status) q = q.eq("verification_status", status);
-  const [rows, entries, { data: pk }, tx] = await Promise.all([loadRealization(sb, vid), loadEntries(sb, vid),
-    sb.from("procurement_packages").select("id, internal_code, name").eq("budget_version_id", vid).order("internal_code").limit(1000), q]);
-  const t = totals(rows), label = new Map(entries.map((e) => [e.id, e.label]));
+  const [rows, form, tx, session] = await Promise.all([loadRealization(sb, vid), loadRealizationForm(sb, vid), q, getSession()]);
+  const canWrite = !!session && can(session.roles, "realization:write");
+  const t = totals(rows), label = new Map(form.entries.map((e) => [e.id, `${e.sub.split(" ")[0]} / ${e.acc.split(" ")[0]}: ${e.desc}`])), rupCode = new Map(form.rups.map((r) => [r.id, r.code]));
   const pages = Math.max(1, Math.ceil((tx.count ?? 0) / PAGE)), href = (p: number, s = status) => `/realisasi?${new URLSearchParams({ ...(s ? { status: s } : {}), page: String(p) })}`;
   const cards: [string, string][] = [["Total pagu rekening", rp(t.pagu)], ["Realisasi terverifikasi", rp(t.verified)], ["Belum diverifikasi", rp(t.unverified)], ["Sisa pagu", rp(t.remaining)], ["Persentase realisasi", t.percent === null ? "N/A" : `${t.percent.replace(".", ",")}%`]];
   return (
     <section className="max-w-6xl space-y-5">
-      <div><h1 className="page-title">Realisasi belanja <span className="page-sub">Tahun {ctx.year}, {ctx.stageName}</span></h1>
-        <p className="text-sm text-slate-600">Sisa dan persentase dihitung dari transaksi terverifikasi saja. Nilai kontrak/SP tidak dihitung sebagai realisasi.</p></div>
+      <div><h1 className="page-title">Input Realisasi <span className="page-sub">Tahun {ctx.year}, {ctx.stageName}</span></h1>
+        <p className="text-sm text-slate-600">Data bersumber dari arsip Anggaran (rekening, program, kegiatan, sub kegiatan, sumber dana, PPTK, pagu), arsip RUP (kode dan pagu paket), dan Anggaran kas. Satu kode RUP dapat dicatat berulang; sisa pagu dan kas dihitung otomatis. Persentase di bawah dihitung dari transaksi terverifikasi saja.</p>
+        <p className="mt-1 text-sm"><Link className="link" href="/paket">Proses pengadaan (status, kontrak/SP, tenggat) &rarr;</Link></p></div>
+      {canWrite && (form.entries.length ? <TransactionForm year={ctx.year} entries={form.entries} rups={form.rups} packages={form.packages} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} /> : <p className="alert alert-warn">Belum ada rekening anggaran. Impor anggaran lebih dulu.</p>)}
       {sp.error && <p role="alert" className="alert alert-error">Verifikasi gagal. Hanya admin yang dapat memverifikasi, dan transaksi harus belum terverifikasi.</p>}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">{cards.map(([k, v]) => <div key={k} className="card p-3"><p className="text-xs text-slate-600">{k}</p><p className="font-semibold tabular-nums">{v}</p></div>)}</div>
       <p className="text-sm text-slate-600">{t.txCount} transaksi, {t.unverifiedCount} belum diverifikasi. {rows.filter((r) => derive(r).overPagu).length > 0 && <b className="text-amber-900">Ada {rows.filter((r) => derive(r).overPagu).length} rekening dengan total transaksi melampaui pagu.</b>}</p>
       <nav className="flex flex-wrap gap-2" aria-label="Filter status">{[["", "Semua"], ["unverified", "Belum diverifikasi"], ["verified", "Terverifikasi"]].map(([v, l]) => <Link key={v} href={href(1, v)} className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition ${v === status ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-cyan-500"}`} aria-current={v === status ? "true" : undefined}>{l}</Link>)}</nav>
       {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !tx.data?.length ? <p className="text-slate-600">Belum ada transaksi{status ? " dengan status ini" : ""}.</p> : (
-        <div className="table-wrap"><table><thead><tr><th>Tanggal</th><th>Rekening</th><th>Jenis</th><th>Dokumen</th><th className="text-right">Nilai</th><th>Status</th></tr></thead>
-          <tbody>{tx.data.map((r) => <tr key={r.id}><td>{r.transaction_date}</td><td>{label.get(r.budget_entry_id) ?? "-"}</td><td>{KINDS[r.kind]?.split(" ")[0]}</td><td>{DOC_TYPES[r.doc_type]} {r.doc_number ?? ""}</td><td className="text-right tabular-nums">{rp(r.amount)}</td>
+        <div className="table-wrap"><table><thead><tr><th>Tanggal</th><th>Rekening</th><th>RUP</th><th>Jenis</th><th>Dokumen</th><th className="text-right">Nilai</th><th>Status</th></tr></thead>
+          <tbody>{tx.data.map((r) => <tr key={r.id}><td>{r.transaction_date}</td><td>{label.get(r.budget_entry_id) ?? "-"}</td><td>{r.rup_package_id ? rupCode.get(r.rup_package_id) ?? "-" : "-"}</td><td>{KINDS[r.kind]?.split(" ")[0]}</td><td>{DOC_TYPES[r.doc_type]} {r.doc_number ?? ""}</td><td className="text-right tabular-nums">{rp(r.amount)}</td>
             <td>{r.verification_status === "verified" ? "Terverifikasi" : <form action={verifyTransaction} className="flex items-center gap-2">Belum diverifikasi<input type="hidden" name="id" value={r.id} /><button className="link">Verifikasi</button></form>}</td></tr>)}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="link" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages}</span>{page < pages && <Link className="link" href={href(page + 1)}>Berikutnya</Link>}</nav>
-      {entries.length ? <TransactionForm entries={entries.map((e) => ({ value: e.id, label: e.label }))} packages={(pk ?? []).map((p) => ({ value: p.id, label: `${p.internal_code} ${p.name}` }))} /> : <p className="text-sm text-slate-600">Belum ada rekening anggaran. Impor anggaran lebih dulu.</p>}
     </section>);
 }

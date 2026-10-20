@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { Brand } from "@/components/logo";
 
-export type NavItem = { href: string; label: string; icon: IconName };
+export type NavItem = { href: string; label: string; icon: IconName; also?: string[] };
 export type NavGroup = { title: string; items: NavItem[] };
 
 export function Shell({ groups, orgName, user, topbar, children }: { groups: NavGroup[]; orgName: string; user: { name: string; username: string; role: string }; topbar: React.ReactNode; children: React.ReactNode }) {
@@ -26,7 +26,7 @@ export function Shell({ groups, orgName, user, topbar, children }: { groups: Nav
         <nav className="relative flex-1 space-y-6 overflow-y-auto px-3 py-3" aria-label="Menu utama">
           {groups.map((g) => (
             <div key={g.title}><p className="mb-2 px-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{g.title}</p>
-              <ul className="space-y-1">{g.items.map((it) => { const on = active(it.href); return (
+              <ul className="space-y-1">{g.items.map((it) => { const on = active(it.href) || (it.also ?? []).some(active); return (
                 <li key={it.href}><Link href={it.href} aria-current={on ? "page" : undefined}
                   className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] font-medium transition ${on ? "bg-gradient-to-r from-cyan-500/20 to-indigo-500/20 text-white ring-1 ring-cyan-400/30" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}>
                   <Icon name={it.icon} className={`h-5 w-5 ${on ? "text-cyan-300" : "text-slate-400 group-hover:text-cyan-300"}`} />{it.label}</Link></li>); })}</ul></div>))}
