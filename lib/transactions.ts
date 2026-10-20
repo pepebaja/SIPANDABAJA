@@ -7,7 +7,7 @@ const optUuid = z.string().transform((v) => v || null).pipe(z.string().uuid().nu
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal wajib diisi (format tanggal tidak valid)");
 // Pengguna mengisi nilai positif; koreksi/pembatalan disimpan negatif oleh sistem.
 export const transactionSchema = z.object({
-  budget_entry_id: z.string().uuid({ message: "Pilih rekening" }), procurement_package_id: optUuid,
+  budget_entry_id: z.string().uuid({ message: "Pilih rekening" }), procurement_package_id: optUuid, rup_package_id: z.string().optional().transform((v) => v || null).pipe(z.string().uuid().nullable()),
   kind: z.enum(["pembayaran", "koreksi", "pembatalan"]), doc_type: z.enum(["kuitansi", "bast", "invoice", "sp2d", "lainnya"]),
   doc_number: z.string().trim().max(100).transform((v) => v || null),
   doc_date: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).transform((v) => v || null), transaction_date: date,

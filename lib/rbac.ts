@@ -11,6 +11,7 @@ export const PERMISSIONS = {
   "budget-setup:write": ["super_admin", "admin_opd"],
   "budget:import": ["super_admin", "admin_opd", "ppbj"],
   "cash:write": ["super_admin", "admin_opd", "ppbj"],
+  "realization:write": ["super_admin", "admin_opd", "ppbj"],
   "rup:write": ["super_admin", "admin_opd", "ppbj"],
   "audit:read": ["super_admin", "admin_opd", "auditor"],
 } as const satisfies Record<string, readonly Role[]>;

@@ -16,3 +16,12 @@ describe("transactionSchema", () => {
 });
 import { fillMonths } from "@/lib/dashboard";
 describe("dashboard", () => it("mengisi 12 bulan dengan 0 untuk bulan kosong", () => { const r = fillMonths([{ month: 3, verified: 500 }]); expect(r).toHaveLength(12); expect(r[2]).toEqual({ bulan: "Mar", realisasi: 500 }); expect(r[0]?.realisasi).toBe(0); }));
+describe("transactionSchema: tautan RUP", () => {
+  const b = { budget_entry_id: "11111111-1111-4111-8111-111111111111", procurement_package_id: "", kind: "pembayaran", doc_type: "kuitansi", doc_number: "", doc_date: "", transaction_date: "2026-02-10", amount: "100", notes: "" };
+  it("RUP opsional", () => { expect(transactionSchema.parse(b).rup_package_id).toBeNull(); });
+  it("menerima uuid RUP dan menolak nilai asal-asalan", () => {
+    expect(transactionSchema.parse({ ...b, rup_package_id: "22222222-2222-4222-8222-222222222222" }).rup_package_id).toBe("22222222-2222-4222-8222-222222222222");
+    expect(transactionSchema.safeParse({ ...b, rup_package_id: "bukan-uuid" }).success).toBe(false);
+  });
+});
+

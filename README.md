@@ -59,6 +59,14 @@ Menu **Paket RUP** dapat diisi dan diperbarui dengan dua cara, dan keduanya bole
 Catatan perilaku: menghapus paket RUP ikut menghapus alokasi rekeningnya (tercatat di log audit), sedangkan paket pengadaan yang bertaut tidak dihapus, hanya tautan RUP-nya dikosongkan. Bila pagu diturunkan di bawah total alokasi, perubahan tetap diterima tetapi diberi peringatan agar alokasi disesuaikan.
 Hak ubah: Super Admin, Admin OPD, dan PPBJ. **Wajib** menjalankan migrasi `supabase/migrations/20260109000000_rup_sync.sql`.
 
+## Input Realisasi (menu terpadu)
+
+Menu **Input Realisasi** menggantikan menu Realisasi dan Paket pengadaan yang terpisah (proses pengadaan tetap tersedia lewat tautan di halaman ini). Alurnya: pilih **kode RUP** (opsional, untuk belanja non-pengadaan dikosongkan) lalu **rekening anggaran** dari arsip anggaran, kemudian tanggal dan nilai. Layar menampilkan program, kegiatan, sub kegiatan, sumber dana, PPTK, pagu rekening, pagu RUP, dan anggaran kas per triwulan.
+- Satu kode RUP dapat dicatat berulang (proses pengadaan berulang); sisa pagu RUP dan rekening dihitung otomatis.
+- **Anggaran kas kumulatif**: triwulan ditentukan dari tanggal transaksi. Sisa kas triwulan lalu terbawa ke berikutnya; kas triwulan depan tidak dapat dipakai untuk triwulan sebelumnya. Untuk transaksi di triwulan q, setiap triwulan k >= q harus memenuhi *kas kumulatif s.d. k >= realisasi s.d. k*.
+- Pembayaran yang melebihi pagu rekening, sisa kas kumulatif, atau pagu RUP **ditolak** (trigger database `check_transaction_limits`, jadi berlaku untuk semua jalur). Koreksi/pembatalan mengembalikan sisa mulai triwulan tanggalnya. Perhitungan memakai semua transaksi, terverifikasi maupun belum. Tanggal transaksi harus di tahun anggaran. Rekening tanpa anggaran kas tidak dapat dibelanjakan.
+- Wajib menjalankan migrasi `supabase/migrations/20260110000000_realization_limits.sql`. Hak mencatat: Super Admin, Admin OPD, PPBJ.
+
 ## Laporan dan dokumen cetak
 
 Menu **Laporan & dokumen** menyediakan laporan yang dapat dicetak (kop surat + tanda tangan otomatis) atau diunduh sebagai Excel:
