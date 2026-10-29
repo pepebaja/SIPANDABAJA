@@ -19,6 +19,19 @@ Masuk memakai **username** (bukan email).
 Alternatif tanpa halaman setup (CLI):
 `node --env-file=.env.local scripts/create-user.mjs <username> "<Password>" "<Nama Lengkap>" super_admin`
 
+## Tidak bisa masuk? (pemulihan akses)
+
+Masuk selalu memakai **username**. Server mencari email Auth asli milik username dari tabel profil, sehingga akun yang dibuat lewat dashboard Supabase,
+versi lama, atau dengan `AUTH_EMAIL_DOMAIN` berbeda tetap bisa masuk. Langkah bila `admin` masih ditolak:
+
+1. Supabase > SQL Editor: jalankan `supabase/diagnostics/cek-login.sql`. Akun harus punya profil aktif + peran; bagian 3 menunjukkan kunci sementara (5 gagal/15 menit).
+2. Pulihkan sekali jalan (membuat/memperbaiki akun, mengatur password, membuka blokir & kunci, mencatat audit):
+   `node --env-file=.env.local scripts/pulihkan-akses.mjs admin "PasswordBaru123x" "Administrator" super_admin`
+3. Vercel > Logs: baris `[login] gagal username=... sebab=...` menunjukkan penyebab sebenarnya (hanya di log server, tidak ditampilkan ke pengguna).
+4. Pesan "Konfigurasi server belum lengkap" berarti `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, atau `SUPABASE_SERVICE_ROLE_KEY` belum diisi di Vercel.
+
+Setiap login berhasil/gagal (pada akun yang ada) tercatat di menu **Log audit** (tanpa password).
+
 ## Memastikan versi terbaru sudah aktif
 
 Versi aplikasi tampil kecil di kiri bawah sidebar dan di bawah formulir login (mis. `v1.2.0 · a1b2c3d`; kode di belakangnya adalah commit GitHub).
