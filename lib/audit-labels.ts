@@ -7,7 +7,7 @@ export const TABLE_LABELS: Record<string, string> = {
 };
 export const ACTION_LABELS: Record<string, string> = {
   INSERT: "Tambah", UPDATE: "Ubah", DELETE: "Hapus", USER_CREATE: "Buat akun", USER_UPDATE: "Ubah akun", USER_PASSWORD_RESET: "Reset password",
-  USER_ACTIVATE: "Aktifkan akun", USER_DEACTIVATE: "Nonaktifkan akun", SETUP_FIRST_ADMIN: "Setup Super Admin", SETTINGS_UPDATE: "Ubah pengaturan",
+  USER_ACTIVATE: "Aktifkan akun", USER_DEACTIVATE: "Nonaktifkan akun", SETUP_FIRST_ADMIN: "Setup Super Admin", ACCESS_RECOVERY: "Pemulihan akses", SETTINGS_UPDATE: "Ubah pengaturan", LOGIN: "Masuk", LOGIN_FAILED: "Gagal masuk",
 };
 export const tableLabel = (t: string) => TABLE_LABELS[t] ?? t;
 export const actionLabel = (a: string) => ACTION_LABELS[a] ?? a;

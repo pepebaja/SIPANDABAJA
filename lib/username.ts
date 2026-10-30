@@ -8,7 +8,8 @@ export const newUsernameSchema = usernameSchema
   .refine((v) => !/[._-]{2,}/.test(v), "Username tidak boleh memuat dua tanda baca berurutan.");
 export const loginSchema = z.object({ username: usernameSchema, password: z.string().min(1).max(200) });
 // Supabase Auth mensyaratkan email; pengguna tidak pernah melihat atau memakainya.
-// PENTING: jangan ubah domain ini setelah ada akun, atau akun lama tidak bisa masuk.
+// Dipakai untuk MEMBUAT akun baru. Saat masuk, email asli dicari dari profil (lib/server/auth-email.ts),
+// sehingga perubahan domain ini tidak lagi mengunci akun lama.
 export const DEFAULT_AUTH_DOMAIN = "sipanda.example.org";
 export function usernameToEmail(username: string, domain = process.env.AUTH_EMAIL_DOMAIN ?? DEFAULT_AUTH_DOMAIN): string {
   return `${usernameSchema.parse(username)}@${domain}`;
