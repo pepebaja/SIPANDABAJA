@@ -5,7 +5,7 @@ import { getBudgetContext } from "@/lib/server/budget-context";
 import { readFirstSheet } from "@/lib/import/xlsx";
 import { sha256 } from "@/lib/import/hash";
 import { validateBudgetRows, type Masters, type RowError } from "@/lib/import/budget";
-import { getSession } from "@/lib/server/session";
+import { getAuthUserId, getSession } from "@/lib/server/session";
 import { can } from "@/lib/rbac";
 
 export type ImportState = { error?: string; jobId?: string; fileName?: string; total?: number; ok?: number; failed?: number; errors?: RowError[]; confirmed?: number };
@@ -18,9 +18,10 @@ async function fetchAll(q: (a: number, b: number) => PromiseLike<{ data: { id: s
 }
 export async function ensureBudgetVersion(): Promise<void> {
   const ctx = await getBudgetContext(); if (!ctx || ctx.versionId) return;
-  const sb = await createClient(); const { data: { user } } = await sb.auth.getUser();
-  const { data: p } = await sb.from("profiles").select("organization_id").eq("id", user!.id).single();
-  await sb.from("budget_versions").insert({ organization_id: p!.organization_id, budget_year_id: ctx.yearId, budget_stage_id: ctx.stageId, version_no: 1, created_by: user!.id });
+  const sb = await createClient(); const uid = await getAuthUserId();
+  if (!uid) return;
+  const { data: p } = await sb.from("profiles").select("organization_id").eq("id", uid).single();
+  await sb.from("budget_versions").insert({ organization_id: p!.organization_id, budget_year_id: ctx.yearId, budget_stage_id: ctx.stageId, version_no: 1, created_by: uid });
   revalidatePath("/anggaran/impor");
 }
 export async function stageBudgetImport(_prev: ImportState, fd: FormData): Promise<ImportState> {

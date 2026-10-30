@@ -18,7 +18,7 @@ const cents = (c: bigint) => fromCents(c);
 export default async function RupPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; deleted?: string; error?: string }> }) {
   const sp = await searchParams, ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p>Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
-  const [sb, session] = [await createClient(), await getSession()];
+  const [sb, session] = [await createClient(), await getSession()]; // getSession ter-cache: tidak ada panggilan jaringan baru
   const canWrite = !!session && can(session.roles, "rup:write"), vid = ctx.versionId;
   const q = (sp.q ?? "").trim().slice(0, 80).replace(/[%,()*\\]/g, " "), page = Math.max(1, Number(sp.page) || 1);
   let query = sb.from("rup_packages").select("id, rup_code, name, procurement_type, pagu", { count: "exact" }).eq("budget_version_id", vid).order("rup_code").range((page - 1) * PAGE, page * PAGE - 1);
@@ -27,8 +27,10 @@ export default async function RupPage({ searchParams }: { searchParams: Promise<
     sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name"),
     sb.from("import_jobs").select("id, file_name, status, ok_rows, error_rows, created_at").eq("kind", "rup_packages").eq("budget_version_id", vid).order("created_at", { ascending: false }).limit(5)]);
   const ids = (data ?? []).map((r) => r.id);
-  const al = ids.length ? await fetchAll<any>((a, b) => sb.from("package_budget_allocations").select("id, rup_package_id, amount").in("rup_package_id", ids).order("id").range(a, b)) : [];
-  const real = new Map<string, bigint>(ids.length ? (await fetchAll<any>((a, b) => sb.rpc("realization_by_rup", { p_version: vid }).order("rup_id").range(a, b))).map((x) => [x.rup_id as string, toCents(parseRupiah(x.amount) ?? "0.00")] as [string, bigint]) : []);
+  const [al, realRows] = ids.length ? await Promise.all([ // paralel, dan hanya untuk paket yang tampil di halaman ini
+    fetchAll<any>((a, b) => sb.from("package_budget_allocations").select("id, rup_package_id, amount").in("rup_package_id", ids).order("id").range(a, b)),
+    fetchAll<any>((a, b) => sb.rpc("realization_by_rup", { p_version: vid }).in("rup_id", ids).order("rup_id").range(a, b))]) : [[], []];
+  const real = new Map<string, bigint>(realRows.map((x: any) => [x.rup_id as string, toCents(parseRupiah(x.amount) ?? "0.00")] as [string, bigint]));
   const used = new Map<string, bigint>(); for (const a of al) used.set(a.rup_package_id, (used.get(a.rup_package_id) ?? 0n) + toCents(parseRupiah(a.amount) ?? "0.00"));
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE)), href = (p: number) => `/rup?${new URLSearchParams({ ...(q ? { q } : {}), page: String(p) })}`;
   return (

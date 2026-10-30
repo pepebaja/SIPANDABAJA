@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
-import { totals } from "@/lib/realization";
-import { loadRealization } from "@/lib/server/realization-data";
+import { loadRealizationTotals } from "@/lib/server/realization-totals";
 import { fillMonths } from "@/lib/dashboard";
 import { rp } from "@/lib/format";
-import { MonthlyChart } from "@/components/monthly-chart";
+import { MonthlyChart } from "@/components/monthly-chart-lazy";
 import { Icon, type IconName } from "@/components/icons";
 import { getSession } from "@/lib/server/session";
 import { can } from "@/lib/rbac";
@@ -22,10 +21,9 @@ export default async function Home() {
   const ctx = await getBudgetContext(), sb = await createClient();
   if (!ctx?.versionId) return <section className="max-w-2xl space-y-2"><h1 className="page-title">Beranda</h1>
     <p className="text-slate-600">Belum ada versi anggaran untuk tahun/tahapan ini. Siapkan di menu <Link className="link" href="/anggaran/impor">Impor anggaran</Link>.</p><QuickLinks /></section>;
-  const [{ data: s, error }, real] = await Promise.all([sb.rpc("dashboard_summary", { p_version: ctx.versionId }), loadRealization(sb, ctx.versionId)]);
+  const [{ data: s, error }, { totals: t }] = await Promise.all([sb.rpc("dashboard_summary", { p_version: ctx.versionId }), loadRealizationTotals(sb, ctx.versionId)]);
   if (error || !s) return <p role="alert" className="alert alert-error">Dashboard tidak dapat dimuat. Muat ulang halaman.</p>;
   const d = s as Summary;
-  const t = totals(real);
   const pct = t.percent === null ? null : Math.min(100, Math.max(0, Number(t.percent)));
   const hero: [string, string, string][] = [
     ["Total pagu anggaran", rp(t.pagu), "/realisasi"], ["Realisasi terverifikasi", rp(t.verified), "/realisasi?status=verified"], ["Sisa anggaran", rp(t.remaining), "/realisasi"]];
