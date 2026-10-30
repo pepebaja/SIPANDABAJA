@@ -14,3 +14,11 @@ describe("konteks tahun anggaran", () => {
     expect(decodeContext("x:y")).toBeNull(); expect(decodeContext(undefined)).toBeNull();
   });
 });
+
+import { pickContext } from "@/lib/context";
+describe("pickContext (dipakai bersama layout & halaman)", () => {
+  const years = [{ id: "y25", year: 2025 }, { id: "y26", year: 2026 }], stages = [{ id: "s1" }, { id: "s2" }], now = new Date("2026-06-01T00:00:00+07:00");
+  it("memakai pilihan tersimpan bila valid", () => expect(pickContext(years, stages, { yearId: "y25", stageId: "s2" }, now)).toEqual({ y: years[0], s: stages[1] }));
+  it("tanpa pilihan: tahun berjalan & tahapan pertama", () => expect(pickContext(years, stages, null, now)).toEqual({ y: years[1], s: stages[0] }));
+  it("pilihan kedaluwarsa jatuh ke bawaan", () => expect(pickContext(years, stages, { yearId: "x", stageId: "x" }, now)).toEqual({ y: years[1], s: stages[0] }));
+});

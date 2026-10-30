@@ -19,6 +19,13 @@ Masuk memakai **username** (bukan email).
 Alternatif tanpa halaman setup (CLI):
 `node --env-file=.env.local scripts/create-user.mjs <username> "<Password>" "<Nama Lengkap>" super_admin`
 
+## Performa (v1.3.0)
+
+1. **Wajib** jalankan migrasi `supabase/migrations/20260111000000_performa.sql` (SQL Editor). Isinya: fungsi total realisasi 1 baris, indeks yang kurang, dan optimasi RLS. Aman diulang; tanpa migrasi ini aplikasi tetap jalan memakai cara lama yang lebih lambat.
+2. **Samakan region.** `vercel.json` menetapkan fungsi Vercel di `sin1` (Singapura). Cek **Supabase > Project Settings > General > Region**; bila bukan Singapore, ubah `regions` di `vercel.json` agar sedekat mungkin dengan region Supabase (mis. `iad1` untuk us-east). Region yang berjauhan menambah ratusan milidetik pada SETIAP kueri.
+3. Navigasi antarmenu memakai cache klien 30 detik (`staleTimes`); setiap aksi simpan/ubah membersihkannya. Data yang diubah pengguna lain dapat tampil terlambat hingga 30 detik; muat ulang halaman untuk data terkini.
+4. Middleware memverifikasi sesi sekali per permintaan lalu meneruskan id pengguna lewat header internal yang selalu ditimpa middleware (lihat `tests/middleware.test.ts`).
+
 ## Tidak bisa masuk? (pemulihan akses)
 
 Masuk selalu memakai **username**. Server mencari email Auth asli milik username dari tabel profil, sehingga akun yang dibuat lewat dashboard Supabase,

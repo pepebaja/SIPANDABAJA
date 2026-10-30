@@ -12,3 +12,7 @@ export function pickYear<T extends { id: string; year: number }>(years: readonly
   const current = Number(now.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 4));
   return years.find((y) => y.year === current) ?? [...years].sort((a, b) => b.year - a.year)[0];
 }
+/** Memilih tahun & tahapan aktif dari daftar aktif + cookie tersimpan (fungsi murni, dipakai layout dan halaman). */
+export function pickContext<Y extends { id: string; year: number }, S extends { id: string }>(years: readonly Y[], stages: readonly S[], saved: { yearId: string; stageId: string } | null, now = new Date()): { y?: Y; s?: S } {
+  return { y: pickYear(years, saved?.yearId, now), s: stages.find((r) => r.id === saved?.stageId) ?? stages[0] };
+}

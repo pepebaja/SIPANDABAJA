@@ -13,6 +13,11 @@ export default {
   env: { NEXT_PUBLIC_APP_VERSION: pkg.version, NEXT_PUBLIC_BUILD: (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 7) },
   reactStrictMode: true,
   // Impor anggaran menerima berkas hingga 5 MB; batas bawaan server action hanya 1 MB.
-  experimental: { serverActions: { bodySizeLimit: "6mb" } },
+  experimental: {
+    serverActions: { bodySizeLimit: "6mb" },
+    // Berpindah menu dalam 30 detik memakai tampilan yang sudah dimuat (instan). Aksi simpan/ubah (revalidatePath) selalu membersihkan cache ini.
+    staleTimes: { dynamic: 30, static: 180 },
+    optimizePackageImports: ["recharts"],
+  },
   async headers() { return [{ source: "/:path*", headers: securityHeaders }]; },
 };
