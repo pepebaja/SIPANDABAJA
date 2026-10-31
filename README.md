@@ -19,6 +19,15 @@ Masuk memakai **username** (bukan email).
 Alternatif tanpa halaman setup (CLI):
 `node --env-file=.env.local scripts/create-user.mjs <username> "<Password>" "<Nama Lengkap>" super_admin`
 
+## Unggah realisasi (v1.4.0)
+
+1. **Jalankan** `supabase/migrations/20260112000000_realisasi_unggah.sql` (SQL Editor). Menambah tanggal berlaku tahapan, kolom SPM/SP2D, dan fungsi penerapan impor. Aman diulang.
+2. Menu **Input Realisasi > Unggah Excel/CSV**: atur tanggal mulai berlaku Pergeseran/Perubahan (Murni otomatis 1 Januari), unduh template, isi, lalu Periksa file dan Catat.
+3. **Aturan tahapan**: tanggal acuan = tanggal SP2D (sudah cair), kalau tidak ada tanggal SPM, kalau tidak ada tanggal transaksi. Tahapan = yang tanggal berlakunya terakhir tidak melewati tanggal acuan. Baris dengan kode RUP/paket = proses pengadaan; tanpa kode = non-pengadaan.
+4. Pratinjau dan penerapan memakai fungsi database yang sama (`apply_transaction_import`), sehingga pagu rekening, anggaran kas kumulatif, pagu RUP, dan dokumen ganda diperiksa persis seperti input manual. Pratinjau dibatalkan otomatis.
+5. Batas 2.000 baris per unggahan (±3 detik di database); file lebih besar dibagi beberapa bagian, dokumen yang sudah tercatat otomatis dilewati.
+6. Akuntabilitas: tiap unggahan tercatat (berkas, checksum, pengunggah, waktu), tiap transaksi menyimpan asal unggahan, dan semua perubahan masuk log audit. Verifikasi massal hanya admin.
+
 ## Performa (v1.3.0)
 
 1. **Wajib** jalankan migrasi `supabase/migrations/20260111000000_performa.sql` (SQL Editor). Isinya: fungsi total realisasi 1 baris, indeks yang kurang, dan optimasi RLS. Aman diulang; tanpa migrasi ini aplikasi tetap jalan memakai cara lama yang lebih lambat.
