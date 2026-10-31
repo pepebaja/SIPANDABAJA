@@ -12,18 +12,19 @@ import { decodeCsv, parseCsv } from "@/lib/import/csv";
 import { sha256 } from "@/lib/import/hash";
 import { findTxHeader, parseTxRows, type StagedTx, type TxLookup, type TxRowError, type TxRowWarning } from "@/lib/import/transactions";
 import { toCents, fromCents } from "@/lib/money";
-import { latestPerStage } from "@/lib/stage-rule";
+import { latestPerStage, PAYMENT_LABEL } from "@/lib/stage-rule";
 import { parseDateCell } from "@/lib/import/dates";
 
 const DENIED = "Anda tidak berwenang mencatat realisasi (hanya Super Admin, Admin OPD, dan PPBJ).";
 const UUID = /^[0-9a-f-]{36}$/i, MAX_BYTES = 5 * 1024 * 1024, MAX_ROWS = 2000; // 2.000 baris ~3 detik di database; lebih besar berisiko melewati batas waktu kueri Supabase
 
-export type PreviewRow = { row: number; tanggal: string; acuan: string; basis: string; tahapan: string; rekening: string; rup: string | null; proses: string; pencairan: string; nilai: string; status: "ok" | "ditolak"; pesan?: string };
+export type PreviewRow = { row: number; tanggal: string; acuan: string; basis: string; tahapan: string; rekening: string; rup: string | null; metode: string | null; proses: string; pencairan: string; nomor: string | null; nilai: string;
+  status: "baru" | "diperbarui" | "sudah" | "ditolak"; pesan?: string };
 export type Breakdown = { key: string; label: string; count: number; amount: string };
 export type TxImportState = {
-  error?: string; jobId?: string; fileName?: string; total?: number; ok?: number; failed?: number; skipped?: number; wouldInsert?: number; existing?: number;
+  error?: string; jobId?: string; fileName?: string; total?: number; ok?: number; failed?: number; skipped?: number; wouldInsert?: number; wouldUpdate?: number; existing?: number;
   errors?: TxRowError[]; dbFailed?: { row: number; message: string }[]; warnings?: TxRowWarning[]; rows?: PreviewRow[];
-  byStage?: Breakdown[]; byPayment?: Breakdown[]; byProses?: Breakdown[]; result?: { inserted: number; existing: number; failed: number };
+  byStage?: Breakdown[]; byPayment?: Breakdown[]; byProses?: Breakdown[]; byMetode?: Breakdown[]; result?: { inserted: number; updated: number; existing: number; failed: number };
 };
 const sum = (xs: StagedTx[]) => fromCents(xs.reduce((a, x) => a + toCents(x.amount), 0n));
 function group(rows: StagedTx[], key: (r: StagedTx) => [string, string]): Breakdown[] {
@@ -31,7 +32,6 @@ function group(rows: StagedTx[], key: (r: StagedTx) => [string, string]): Breakd
   for (const r of rows) { const [k, label] = key(r); const g = m.get(k) ?? { label, rs: [] }; g.rs.push(r); m.set(k, g); }
   return [...m].map(([k, g]) => ({ key: k, label: g.label, count: g.rs.length, amount: sum(g.rs) }));
 }
-const PAY_LABEL = { cair: "Sudah cair (SP2D)", spm: "SPM diajukan", belum: "Belum diajukan" } as const;
 
 export async function stageTxImport(_p: TxImportState, fd: FormData): Promise<TxImportState> {
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) return { error: DENIED };
@@ -54,17 +54,16 @@ export async function stageTxImport(_p: TxImportState, fd: FormData): Promise<Tx
   const sb = await createClient();
   const versions = await loadStageVersions(sb, ctx.yearId), vids = latestPerStage(versions).map((v) => v.id);
   if (!vids.length) return { error: "Belum ada versi anggaran pada tahun ini." };
-  const [ents, rups, pkgs, allocs] = await Promise.all([
-    fetchAll<any>((a, b) => sb.from("budget_entries").select("id, budget_version_id, description, subactivities(code), expenditure_accounts(code), funding_sources(code)").in("budget_version_id", vids).order("id").range(a, b)),
-    fetchAll<any>((a, b) => sb.from("rup_packages").select("id, budget_version_id, rup_code").in("budget_version_id", vids).order("id").range(a, b)),
-    fetchAll<any>((a, b) => sb.from("procurement_packages").select("id, budget_version_id, internal_code, rup_package_id").in("budget_version_id", vids).order("id").range(a, b)),
+  const [ents, rups, methods, allocs] = await Promise.all([
+    fetchAll<any>((a, b) => sb.from("budget_entries").select("id, budget_version_id, description, subactivity_id, account_id, funding_source_id, subactivities(code), expenditure_accounts(code), funding_sources(code)").in("budget_version_id", vids).order("id").range(a, b)),
+    fetchAll<any>((a, b) => sb.from("rup_packages").select("id, budget_version_id, rup_code, planned_method_id").in("budget_version_id", vids).order("id").range(a, b)),
+    fetchAll<any>((a, b) => sb.from("procurement_methods").select("id, code, name").eq("is_active", true).order("id").range(a, b)),
     fetchAll<any>((a, b) => sb.from("package_budget_allocations").select("id, budget_entry_id, rup_packages!inner(rup_code, budget_version_id)").in("rup_packages.budget_version_id", vids).order("id").range(a, b))]);
-  const rupByVersion = new Map<string, Map<string, string>>(), pkgByVersion = new Map<string, Map<string, { id: string; rupId: string | null }>>(), rupCodeById = new Map<string, string>();
-  for (const r of rups) { (rupByVersion.get(r.budget_version_id) ?? rupByVersion.set(r.budget_version_id, new Map()).get(r.budget_version_id)!).set(r.rup_code, r.id); rupCodeById.set(r.id, r.rup_code); }
-  for (const p of pkgs) (pkgByVersion.get(p.budget_version_id) ?? pkgByVersion.set(p.budget_version_id, new Map()).get(p.budget_version_id)!).set(p.internal_code, { id: p.id, rupId: p.rup_package_id });
+  const rupByVersion = new Map<string, Map<string, { id: string; methodId: string | null }>>();
+  for (const r of rups) (rupByVersion.get(r.budget_version_id) ?? rupByVersion.set(r.budget_version_id, new Map()).get(r.budget_version_id)!).set(r.rup_code, { id: r.id, methodId: r.planned_method_id ?? null });
   const allocRupByEntry = new Map<string, string[]>(); for (const a of allocs) allocRupByEntry.set(a.budget_entry_id, [...(allocRupByEntry.get(a.budget_entry_id) ?? []), a.rup_packages.rup_code]);
-  const lk: TxLookup = { year: ctx.year, versions, rupByVersion, pkgByVersion, rupCodeById, allocRupByEntry,
-    entries: ents.map((e: any) => ({ id: e.id, versionId: e.budget_version_id, sub: e.subactivities?.code ?? "", acc: e.expenditure_accounts?.code ?? "", fund: e.funding_sources?.code ?? "", desc: e.description })) };
+  const lk: TxLookup = { year: ctx.year, versions, rupByVersion, allocRupByEntry, methods: methods.map((m: any) => ({ id: m.id, code: m.code, name: m.name })),
+    entries: ents.map((e: any) => ({ id: e.id, versionId: e.budget_version_id, sub: e.subactivities?.code ?? "", acc: e.expenditure_accounts?.code ?? "", fund: e.funding_sources?.code ?? "", desc: e.description, subId: e.subactivity_id, accId: e.account_id, fundId: e.funding_source_id ?? null })) };
 
   const res = parseTxRows(matrix, h.map, lk);
   if (!res.valid.length && !res.errors.length) return { error: "Tidak ada baris data di bawah judul kolom." };
@@ -85,21 +84,24 @@ export async function stageTxImport(_p: TxImportState, fd: FormData): Promise<Tx
   }
   if (res.errors.length) await sb.from("import_errors").insert(res.errors.slice(0, 1000).map((e) => ({ import_job_id: jobId, row_no: e.row, field: e.field, message: e.message, hint: e.hint })));
 
-  // Pratinjau memakai logika database yang sama dengan penerapan (lalu dibatalkan): batas pagu, kas kumulatif, pagu RUP, dokumen ganda.
-  let dbFailed: { row: number; message: string }[] = [], wouldInsert = 0, existing = 0;
+  // Pratinjau memakai logika database yang sama dengan penerapan (lalu dibatalkan): batas pagu, kas kumulatif, pagu RUP, pengenalan baris yang sudah tercatat.
+  let dbFailed: { row: number; message: string }[] = [], inserted = 0, updated = 0, existing = 0; const act = new Map<number, "baru" | "diperbarui" | "sudah">();
   if (res.valid.length) {
     const { data, error } = await sb.rpc("apply_transaction_import", { p_job: jobId, p_commit: false });
-    if (error) return { error: error.message.includes("function") || error.message.includes("schema cache") ? "Migrasi database 20260112 (unggah realisasi) belum dijalankan di Supabase." : error.message };
-    const r = data as { inserted: number; existing: number; failed: { row: number; message: string }[] };
-    dbFailed = r.failed ?? []; wouldInsert = r.inserted; existing = r.existing;
+    if (error) return { error: error.message.includes("function") || error.message.includes("schema cache") || error.message.includes("jsonb_to_record") ? "Migrasi database 20260113 (realisasi sederhana) belum dijalankan di Supabase." : error.message };
+    const r = data as { inserted: number; updated: number; existing: number; failed: { row: number; message: string }[]; inserted_rows: number[]; updated_rows: number[]; existing_rows: number[] };
+    dbFailed = r.failed ?? []; inserted = r.inserted; updated = r.updated; existing = r.existing;
+    r.inserted_rows?.forEach((n) => act.set(n, "baru")); r.updated_rows?.forEach((n) => act.set(n, "diperbarui")); r.existing_rows?.forEach((n) => act.set(n, "sudah"));
   }
   const bad = new Map(dbFailed.map((f) => [f.row, f.message])), good = res.valid.filter((v) => !bad.has(v.row));
-  const rows: PreviewRow[] = res.valid.slice(0, 300).map((v) => ({ row: v.row, tanggal: v.transaction_date, acuan: v.ref_date, basis: v.basis, tahapan: v.stage_name, rekening: v.entry_label, rup: v.rup_code, proses: v.proses === "pengadaan" ? "Pengadaan" : "Non-pengadaan",
-    pencairan: PAY_LABEL[v.payment_status], nilai: v.amount, status: bad.has(v.row) ? "ditolak" : "ok", pesan: bad.get(v.row) }));
+  const rows: PreviewRow[] = res.valid.slice(0, 300).map((v) => ({ row: v.row, tanggal: v.transaction_date, acuan: v.ref_date, basis: v.basis, tahapan: v.stage_name, rekening: v.entry_label, rup: v.rup_code, metode: v.method_name,
+    proses: v.proses === "pengadaan" ? "Pengadaan" : "Non-pengadaan", pencairan: PAYMENT_LABEL[v.payment_status], nomor: v.payment_number, nilai: v.amount, status: bad.has(v.row) ? "ditolak" : act.get(v.row) ?? "baru", pesan: bad.get(v.row) }));
   revalidatePath("/realisasi");
-  return { jobId, fileName: file.name, total: payload.total_rows, ok: res.valid.length, failed: failedRows + dbFailed.length, skipped: res.skipped, wouldInsert, existing,
+  return { jobId, fileName: file.name, total: payload.total_rows, ok: res.valid.length, failed: failedRows + dbFailed.length, skipped: res.skipped, wouldInsert: inserted, wouldUpdate: updated, existing,
     errors: res.errors.slice(0, 200), dbFailed: dbFailed.slice(0, 200), warnings: res.warnings.slice(0, 200), rows,
-    byStage: group(good, (r) => [r.stage_code, r.stage_name]), byPayment: group(good, (r) => [r.payment_status, PAY_LABEL[r.payment_status]]), byProses: group(good, (r) => [r.proses, r.proses === "pengadaan" ? "Proses pengadaan (ada kode RUP/paket)" : "Non-pengadaan"]) };
+    byStage: group(good, (r) => [r.stage_code, r.stage_name]), byPayment: group(good, (r) => [r.payment_status, PAYMENT_LABEL[r.payment_status]]),
+    byProses: group(good, (r) => [r.proses, r.proses === "pengadaan" ? "Proses pengadaan (kode RUP/metode terisi)" : "Non-pengadaan"]),
+    byMetode: group(good.filter((r) => r.method_name), (r) => [r.method_id ?? "", r.method_name ?? ""]) };
 }
 
 export async function confirmTxImport(_p: TxImportState, fd: FormData): Promise<TxImportState> {
@@ -107,9 +109,9 @@ export async function confirmTxImport(_p: TxImportState, fd: FormData): Promise<
   const jobId = String(fd.get("jobId") ?? ""); if (!UUID.test(jobId)) return { error: "Job impor tidak valid." };
   const { data, error } = await (await createClient()).rpc("apply_transaction_import", { p_job: jobId, p_commit: true, p_skip_errors: fd.get("skip") === "on" });
   if (error) return { error: error.message };
-  const r = data as { inserted: number; existing: number; failed: unknown[] };
+  const r = data as { inserted: number; updated: number; existing: number; failed: unknown[] };
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
-  return { result: { inserted: r.inserted, existing: r.existing, failed: r.failed?.length ?? 0 } };
+  return { result: { inserted: r.inserted, updated: r.updated, existing: r.existing, failed: r.failed?.length ?? 0 } };
 }
 export async function deleteTxImportJob(fd: FormData): Promise<void> {
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) return;

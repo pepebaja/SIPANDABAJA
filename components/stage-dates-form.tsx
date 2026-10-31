@@ -11,7 +11,7 @@ export function StageDatesForm({ year, versions, canEdit }: { year: number; vers
   return (
     <div className="card space-y-3 p-5">
       <div><p className="eyebrow">Aturan tahapan anggaran {year}</p><h2>Kapan tiap tahapan mulai berlaku?</h2>
-        <p className="mt-1 text-sm text-slate-600">Setiap transaksi masuk ke tahapan yang berlaku pada <b>tanggal SP2D</b> (bila sudah cair), atau <b>tanggal SPM</b> (bila baru diajukan), atau <b>tanggal transaksi</b> (bila belum diajukan). Tahapan berlaku sejak tanggal mulainya sampai tahapan berikutnya mulai berlaku.</p></div>
+        <p className="mt-1 text-sm text-slate-600">Setiap transaksi masuk ke tahapan yang berlaku pada <b>Tanggal SPM/SP2D</b> (bila sudah ada), atau pada <b>tanggal transaksi</b> (bila belum). Tahapan berlaku sejak tanggal mulainya sampai tahapan berikutnya mulai berlaku.</p></div>
       {!versions.length && <p className="alert alert-warn">Belum ada versi anggaran pada tahun ini. Siapkan di menu Impor anggaran (pilih tahapan di bagian atas layar).</p>}
       {!!missing.length && <p className="alert alert-warn">Tanggal berlaku {missing.map((v) => v.stageName).join(", ")} belum diatur, sehingga tahapan itu belum dipakai untuk menentukan transaksi.</p>}
       {!!versions.length && (
