@@ -10,7 +10,6 @@ import { fromCents, toCents } from "@/lib/money";
 import { parseRupiah } from "@/lib/import/parse";
 import { QUARTER_LABELS } from "@/lib/cash";
 import { loadCashEntries } from "./cash-data";
-import { DOC_TYPES, KINDS } from "@/lib/transactions";
 import { actionLabel, auditSummary, tableLabel } from "@/lib/audit-labels";
 import { fmtDate, fmtDateTime } from "@/lib/date";
 import { findReport, type Report } from "@/lib/report-types";
@@ -111,14 +110,14 @@ export async function buildReport(slug: string, { sb, ctx, session }: Ctx): Prom
       }
       case "transaksi": {
         const [entries, tx] = await Promise.all([loadEntryRows(sb, vid!),
-          fetchAll<any>((f, t) => sb.from("transactions").select("id, transaction_date, kind, doc_type, doc_number, amount, verification_status, budget_entry_id, pkg:procurement_packages(internal_code)").eq("budget_version_id", vid!).order("transaction_date", { ascending: false }).order("id").range(f, t))]);
+          fetchAll<any>((f, t) => sb.from("transactions").select("id, transaction_date, amount, verification_status, budget_entry_id, payment_date, payment_number, rup:rup_packages(rup_code), method:procurement_methods(name)").eq("budget_version_id", vid!).order("transaction_date", { ascending: false }).order("id").range(f, t))]);
         const lab = new Map(entries.map((e) => [e.id, entryLabel(e)]));
-        const rows = tx.map((t, i) => ({ no: i + 1, tgl: fmtDate(t.transaction_date), rek: lab.get(t.budget_entry_id) ?? "-", paket: t.pkg?.internal_code ?? "-", jenis: (KINDS[t.kind] ?? t.kind).split(" ")[0]!, dok: `${DOC_TYPES[t.doc_type] ?? t.doc_type} ${t.doc_number ?? ""}`.trim(), nilai: m(t.amount), status: t.verification_status === "verified" ? "Terverifikasi" : "Belum diverifikasi", v: t.verification_status }));
+        const rows = tx.map((t, i) => ({ no: i + 1, tgl: fmtDate(t.transaction_date), rek: lab.get(t.budget_entry_id) ?? "-", rup: t.rup?.rup_code ?? "-", metode: t.method?.name ?? "-", spm: [t.payment_date ? fmtDate(t.payment_date) : "", t.payment_number ?? ""].join(" ").trim() || "-", nilai: m(t.amount), status: t.verification_status === "verified" ? "Terverifikasi" : "Belum diverifikasi", v: t.verification_status }));
         const ver = sum(rows.filter((r) => r.v === "verified").map((r) => r.nilai)), unv = sum(rows.filter((r) => r.v !== "verified").map((r) => r.nilai));
         return { report: { ...base, columns: [
-          { key: "no", label: "No", kind: "int", align: "center", width: 6 }, { key: "tgl", label: "Tanggal", align: "center", width: 12 }, { key: "rek", label: "Rekening anggaran", width: 46 }, { key: "paket", label: "Paket", width: 14 },
-          { key: "jenis", label: "Jenis", width: 13 }, { key: "dok", label: "Dokumen", width: 22 }, { key: "nilai", label: "Nilai", kind: "money", width: 18 }, { key: "status", label: "Status", width: 20 }],
-          rows, totals: { rek: "TOTAL TERVERIFIKASI", nilai: ver }, notes: [`Total belum diverifikasi (tidak dihitung sebagai realisasi): ${new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2 }).format(Number(unv))}.`, "Koreksi dan pembatalan bernilai negatif."] } };
+          { key: "no", label: "No", kind: "int", align: "center", width: 6 }, { key: "tgl", label: "Tanggal", align: "center", width: 12 }, { key: "rek", label: "Rekening anggaran", width: 46 }, { key: "rup", label: "Kode RUP", width: 14 },
+          { key: "metode", label: "Metode pemilihan", width: 20 }, { key: "spm", label: "Tgl / No SPM-SP2D", width: 26 }, { key: "nilai", label: "Nilai", kind: "money", width: 18 }, { key: "status", label: "Status", width: 20 }],
+          rows, totals: { rek: "TOTAL TERVERIFIKASI", nilai: ver }, notes: [`Total belum diverifikasi (tidak dihitung sebagai realisasi): ${new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2 }).format(Number(unv))}.`, "Koreksi bernilai negatif."] } };
       }
       case "pengguna": {
         const [pf, rl] = await Promise.all([

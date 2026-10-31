@@ -4,76 +4,85 @@ import { toCents } from "../money";
 import type { MatrixRow } from "./xlsx";
 import { BASIS_LABEL, paymentStatusOf, referenceDate, resolveVersion, type Basis, type PaymentStatus, type StageVersion } from "../stage-rule";
 
-export const DOC_TYPE_KEYS = ["kuitansi", "bast", "invoice", "sp2d", "lainnya"] as const;
-export type TxField = "tanggal" | "sub" | "rek" | "dana" | "uraian" | "rup" | "paket" | "jenis" | "dokjenis" | "doknomor" | "doktgl" | "spmno" | "spmtgl" | "sp2dno" | "sp2dtgl" | "nilai" | "catatan";
-export const TX_TEMPLATE_COLUMNS = ["tanggal_transaksi", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "uraian", "kode_rup", "kode_paket", "jenis_transaksi", "jenis_dokumen", "nomor_dokumen", "tanggal_dokumen", "no_spm", "tanggal_spm", "no_sp2d", "tanggal_sp2d", "nilai", "catatan"] as const;
+/** Kolom template (urutan tampil). Kolom lama (jenis transaksi/dokumen, nomor/tanggal dokumen, kode paket) sudah dihapus. */
+export const TX_TEMPLATE_COLUMNS = ["tanggal_transaksi", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "kode_rup", "metode_pemilihan", "tanggal_spm_sp2d", "no_spm_sp2d", "nilai", "catatan"] as const;
+export type TxField = "tanggal" | "sub" | "rek" | "dana" | "uraian" | "rup" | "metode" | "paytgl" | "payno" | "spmtgl" | "spmno" | "sp2dtgl" | "sp2dno" | "jenis" | "nilai" | "catatan";
 const alnum = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const str = (v: unknown) => String(v ?? "").trim();
 const ALIASES: Record<TxField, string[]> = {
   tanggal: ["tanggaltransaksi", "tgltransaksi", "tanggal", "tgl", "tanggalbukti", "tanggalrealisasi"],
-  sub: ["kodesubkegiatan", "subkegiatan", "kodesubkeg", "kodesub", "kodesubkegiatan"],
+  sub: ["kodesubkegiatan", "subkegiatan", "kodesubkeg", "kodesub"],
   rek: ["koderekening", "rekening", "kodeakun", "akun", "koderek", "kodeakunbelanja"],
   dana: ["kodesumberdana", "sumberdana", "dana"],
   uraian: ["uraian", "uraianbelanja", "uraianrekening"],
   rup: ["koderup", "idrup", "kodepaketrup", "rup"],
-  paket: ["kodepaket", "kodepaketpengadaan", "kodepengadaan", "nopaket"],
-  jenis: ["jenistransaksi", "jenis", "sifat"],
-  dokjenis: ["jenisdokumen", "jenisdok", "dokumen"],
-  doknomor: ["nomordokumen", "nodokumen", "nomordok", "nomorbukti", "nobukti", "nomorkuitansi", "nomorbast", "nomorinvoice"],
-  doktgl: ["tanggaldokumen", "tgldokumen", "tgldok", "tanggalbukti"],
-  spmno: ["nospm", "nomorspm", "spm"],
-  spmtgl: ["tanggalspm", "tglspm"],
-  sp2dno: ["nosp2d", "nomorsp2d", "sp2d"],
-  sp2dtgl: ["tanggalsp2d", "tglsp2d", "tanggalpencairan", "tglcair"],
+  metode: ["metodepemilihan", "metode", "metodepengadaan", "carapengadaan"],
+  paytgl: ["tanggalspmsp2d", "tglspmsp2d", "tanggalspmdansp2d", "tanggalsp2dspm", "tanggalpencairan", "tglpencairan", "tglcair"],
+  payno: ["nospmsp2d", "nomorspmsp2d", "nospmdansp2d", "nosp2dspm", "nomorpencairan"],
+  spmtgl: ["tanggalspm", "tglspm"], spmno: ["nospm", "nomorspm", "spm"],           // format lama: tetap terbaca (SP2D diutamakan atas SPM)
+  sp2dtgl: ["tanggalsp2d", "tglsp2d"], sp2dno: ["nosp2d", "nomorsp2d", "sp2d"],
+  jenis: ["jenistransaksi", "jenis", "sifat"],                                       // format lama: koreksi/pembatalan tetap menjadi nilai minus
   nilai: ["nilai", "jumlah", "nominal", "realisasi", "nilairealisasi", "jumlahrp", "nilairp", "bruto"],
   catatan: ["catatan", "keterangan", "ket"],
 };
-export const TX_FIELD_LABEL: Record<TxField, string> = { tanggal: "Tanggal transaksi", sub: "Kode subkegiatan", rek: "Kode rekening", dana: "Kode sumber dana", uraian: "Uraian", rup: "Kode RUP", paket: "Kode paket", jenis: "Jenis transaksi", dokjenis: "Jenis dokumen",
-  doknomor: "Nomor dokumen", doktgl: "Tanggal dokumen", spmno: "No SPM", spmtgl: "Tanggal SPM", sp2dno: "No SP2D", sp2dtgl: "Tanggal SP2D", nilai: "Nilai", catatan: "Catatan" };
-export type TxHeaderMap = { headerRow: number; cols: Partial<Record<TxField, number>> };
+// Kolom format lama yang sudah tidak dipakai: dikenali agar pengguna diberi tahu, bukan diabaikan diam-diam.
+const RETIRED: Record<string, string> = { kodepaket: "kode_paket (gunakan kode_rup)", kodepaketpengadaan: "kode_paket (gunakan kode_rup)", kodepengadaan: "kode_paket (gunakan kode_rup)", nopaket: "kode_paket (gunakan kode_rup)",
+  jenisdokumen: "jenis_dokumen", jenisdok: "jenis_dokumen", nomordokumen: "nomor_dokumen", nodokumen: "nomor_dokumen", nomorbukti: "nomor_dokumen", tanggaldokumen: "tanggal_dokumen", tgldokumen: "tanggal_dokumen" };
+export const TX_FIELD_LABEL: Record<TxField, string> = { tanggal: "Tanggal transaksi", sub: "Kode subkegiatan", rek: "Kode rekening", dana: "Kode sumber dana", uraian: "Uraian", rup: "Kode RUP", metode: "Metode pemilihan", paytgl: "Tanggal SPM/SP2D",
+  payno: "No SPM/SP2D", spmtgl: "Tanggal SPM", spmno: "No SPM", sp2dtgl: "Tanggal SP2D", sp2dno: "No SP2D", jenis: "Jenis transaksi", nilai: "Nilai", catatan: "Catatan" };
+export type TxHeaderMap = { headerRow: number; cols: Partial<Record<TxField, number>>; retired: string[] };
 
 /** Mencari baris judul kolom pada 30 baris pertama (berkas ekspor sering memuat judul laporan di atas tabel). */
 export function findTxHeader(rows: MatrixRow[]): { map: TxHeaderMap } | { error: string } {
   let best: { map: TxHeaderMap; score: number } | null = null;
   for (const r of rows.slice(0, 30)) {
-    const cols: Partial<Record<TxField, number>> = {};
-    r.cells.forEach((v, i) => { const a = alnum(v); if (!a) return; for (const f of Object.keys(ALIASES) as TxField[]) if (cols[f] === undefined && ALIASES[f].includes(a)) { cols[f] = i; break; } });
+    const cols: Partial<Record<TxField, number>> = {}, retired = new Set<string>();
+    r.cells.forEach((v, i) => { const a = alnum(v); if (!a) return; if (RETIRED[a]) { retired.add(RETIRED[a]!); return; }
+      for (const f of Object.keys(ALIASES) as TxField[]) if (cols[f] === undefined && ALIASES[f].includes(a)) { cols[f] = i; break; } });
     const score = Object.keys(cols).length;
-    if (cols.tanggal !== undefined && cols.sub !== undefined && cols.rek !== undefined && cols.nilai !== undefined && (!best || score > best.score)) best = { map: { headerRow: r.n, cols }, score };
+    if (cols.tanggal !== undefined && cols.sub !== undefined && cols.rek !== undefined && cols.nilai !== undefined && (!best || score > best.score)) best = { map: { headerRow: r.n, cols, retired: [...retired] }, score };
   }
   if (!best) return { error: "Baris judul kolom tidak ditemukan. File wajib memuat kolom tanggal_transaksi, kode_subkegiatan, kode_rekening, dan nilai. Unduh template bila perlu." };
   return { map: best.map };
 }
 
-export type TxEntry = { id: string; versionId: string; sub: string; acc: string; fund: string; desc: string };
+export type TxEntry = { id: string; versionId: string; sub: string; acc: string; fund: string; desc: string; subId: string; accId: string; fundId: string | null };
+export type TxMethod = { id: string; code: string; name: string };
 export type TxLookup = {
-  year: number; versions: StageVersion[]; entries: TxEntry[];
-  rupByVersion: Map<string, Map<string, string>>;                                         // versionId -> kode RUP -> id
-  pkgByVersion: Map<string, Map<string, { id: string; rupId: string | null }>>;            // versionId -> kode paket -> {id, rupId}
-  rupCodeById?: Map<string, string>;
-  allocRupByEntry?: Map<string, string[]>;                                                 // entryId -> kode RUP yang dialokasikan ke rekening itu
+  year: number; versions: StageVersion[]; entries: TxEntry[]; methods: TxMethod[];
+  rupByVersion: Map<string, Map<string, { id: string; methodId: string | null }>>;     // versionId -> kode RUP -> {id, metode rencana}
+  allocRupByEntry?: Map<string, string[]>;                                              // entryId -> kode RUP yang dialokasikan ke rekening itu
 };
 export type StagedTx = {
-  row: number; version_id: string; stage_code: string; stage_name: string; entry_id: string; entry_label: string;
-  rup_package_id: string | null; rup_code: string | null; procurement_package_id: string | null; proses: "pengadaan" | "non_pengadaan";
-  kind: "pembayaran" | "koreksi" | "pembatalan"; doc_type: string; doc_number: string; doc_date: string | null; transaction_date: string;
-  spm_number: string | null; spm_date: string | null; sp2d_number: string | null; sp2d_date: string | null;
+  row: number; version_id: string; stage_code: string; stage_name: string; entry_id: string; sub_id: string; acc_id: string; fund_id: string | null; entry_label: string;
+  rup_package_id: string | null; rup_code: string | null; method_id: string | null; method_name: string | null; proses: "pengadaan" | "non_pengadaan";
+  transaction_date: string; payment_date: string | null; payment_number: string | null;
   ref_date: string; basis: Basis; payment_status: PaymentStatus; amount: string; notes: string | null;
 };
 export type TxRowError = { row: number; field: string; message: string; hint: string };
-export type TxRowWarning = { row: number; message: string };
-const KIND_MAP: Record<string, StagedTx["kind"]> = { pembayaran: "pembayaran", bayar: "pembayaran", realisasi: "pembayaran", koreksi: "koreksi", pembatalan: "pembatalan", batal: "pembatalan" };
-const DOC_MAP: Record<string, string> = { kuitansi: "kuitansi", kwitansi: "kuitansi", bast: "bast", beritaacara: "bast", invoice: "invoice", faktur: "invoice", sp2d: "sp2d", lainnya: "lainnya", lain: "lainnya" };
+export type TxRowWarning = { row: number; message: string };   // row 0 = catatan untuk seluruh file
+
+// Alias tambahan per kode master metode (nama resmi tetap dicocokkan langsung dari master).
+const METHOD_ALIASES: Record<string, string[]> = { EPURCHASING: ["ekatalog", "ecatalog", "ecatalogue", "katalogelektronik", "epurchase", "inaproc"], PL: ["pembelianlangsung"], PENUNJUKAN: ["penunjukan"],
+  TENDER_CEPAT: ["tendercepat"], TENDER: ["tenderumum", "tenderterbuka"], SELEKSI: ["seleksikonsultan"], SWAKELOLA: ["swakelolatipei", "swakelolatipeii", "swakelolatipeiii", "swakelolatipeiv"] };
+export function matchMethod(input: string, methods: TxMethod[]): TxMethod | null {
+  const k = alnum(input); if (!k || k === "pl") return null;            // "PL" ambigu (Pengadaan Langsung / Penunjukan Langsung): wajib ditulis lengkap
+  const exact = methods.find((m) => alnum(m.name) === k || alnum(m.code) === k); if (exact) return exact;
+  return methods.find((m) => (METHOD_ALIASES[m.code] ?? []).includes(k)) ?? null;
+}
+const LEGACY_KIND = new Set(["koreksi", "pembatalan", "batal"]);
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): { valid: StagedTx[]; errors: TxRowError[]; warnings: TxRowWarning[]; skipped: number } {
   const valid: StagedTx[] = [], errors: TxRowError[] = [], warnings: TxRowWarning[] = [], seen = new Map<string, number>(); let skipped = 0;
+  if (map.retired.length) warnings.push({ row: 0, message: `Kolom ${map.retired.join(", ")} sudah tidak dipakai dan diabaikan. Hubungkan pengadaan lewat kode_rup; nomor dokumen tidak lagi diperlukan.` });
+  if (map.cols.jenis !== undefined) warnings.push({ row: 0, message: "Kolom jenis_transaksi sudah tidak dipakai: baris bertanda koreksi/pembatalan tetap dicatat sebagai nilai minus. Untuk seterusnya isi koreksi langsung dengan nilai minus." });
   const c = map.cols, at = (r: MatrixRow, f: TxField) => (c[f] === undefined ? undefined : r.cells[c[f]!]);
   const entriesBy = new Map<string, TxEntry[]>(); for (const e of lk.entries) { const k = `${e.versionId}|${e.sub}|${e.acc}`; entriesBy.set(k, [...(entriesBy.get(k) ?? []), e]); }
   for (const r of rows) {
     if (r.n <= map.headerRow) continue;
     const g = (f: TxField) => str(at(r, f));
-    if (!g("tanggal") && !g("sub") && !g("rek") && g("nilai") === "" ) { skipped++; continue; }            // baris kosong / pemisah
+    if (!g("tanggal") && !g("sub") && !g("rek") && g("nilai") === "") { skipped++; continue; }              // baris kosong / pemisah
     if (ALIASES.tanggal.includes(alnum(g("tanggal"))) || ALIASES.sub.includes(alnum(g("sub")))) { skipped++; continue; } // judul berulang
     const before = errors.length, err = (field: string, message: string, hint: string) => errors.push({ row: r.n, field, message, hint });
     const warn = (message: string) => warnings.push({ row: r.n, message });
@@ -85,36 +94,26 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     const sub = g("sub"), acc = g("rek");
     if (!sub) err("kode_subkegiatan", "Kosong", "Isi kode subkegiatan sesuai DPA"); if (!acc) err("kode_rekening", "Kosong", "Isi kode rekening");
 
+    // Nilai minus = koreksi (mengurangi realisasi). Format lama: jenis koreksi/pembatalan dengan nilai positif tetap dijadikan minus.
     const amountRaw = parseRupiah(at(r, "nilai")); let amount = "";
-    if (amountRaw === null) err("nilai", g("nilai") ? `Format angka tidak valid: "${g("nilai")}"` : "Nilai kosong", "Gunakan angka, mis. 1500000 atau 1.500.000,00");
-    else if (toCents(amountRaw) <= 0n) err("nilai", "Nilai harus lebih dari nol", "Isi positif; untuk pengurangan pilih jenis_transaksi koreksi atau pembatalan");
-    else amount = amountRaw;
+    if (amountRaw === null) err("nilai", g("nilai") ? `Format angka tidak valid: "${g("nilai")}"` : "Nilai kosong", "Gunakan angka, mis. 1500000 atau 1.500.000,00; minus untuk koreksi");
+    else if (toCents(amountRaw) === 0n) err("nilai", "Nilai tidak boleh nol", "Isi nilai positif; minus untuk koreksi/pengurangan");
+    else amount = LEGACY_KIND.has(alnum(g("jenis"))) && !amountRaw.startsWith("-") ? `-${amountRaw}` : amountRaw;
 
-    const kindRaw = g("jenis"), kind = kindRaw ? KIND_MAP[alnum(kindRaw)] : "pembayaran";
-    if (!kind) err("jenis_transaksi", `Jenis transaksi tidak dikenali: "${kindRaw}"`, "Gunakan pembayaran, koreksi, atau pembatalan");
-    const spmNo = g("spmno") || null, sp2dNo = g("sp2dno") || null;
-    const spmTgl = parseDateCell(at(r, "spmtgl")), sp2dTgl = parseDateCell(at(r, "sp2dtgl")), docTgl = parseDateCell(at(r, "doktgl"));
-    if (spmTgl === null) err("tanggal_spm", `Tanggal tidak dapat dibaca: "${g("spmtgl")}"`, "Gunakan format 15/03/2026"); if (sp2dTgl === null) err("tanggal_sp2d", `Tanggal tidak dapat dibaca: "${g("sp2dtgl")}"`, "Gunakan format 15/03/2026");
-    if (docTgl === null) err("tanggal_dokumen", `Tanggal tidak dapat dibaca: "${g("doktgl")}"`, "Gunakan format 15/03/2026");
-    if (spmNo && spmTgl === "") err("tanggal_spm", "No SPM diisi tetapi tanggal SPM kosong", "Isi tanggal SPM");
-    if (sp2dNo && sp2dTgl === "") err("tanggal_sp2d", "No SP2D diisi tetapi tanggal SP2D kosong", "Isi tanggal SP2D");
-    if (!spmNo && spmTgl) err("no_spm", "Tanggal SPM diisi tetapi No SPM kosong", "Isi nomor SPM");
-    if (!sp2dNo && sp2dTgl) err("no_sp2d", "Tanggal SP2D diisi tetapi No SP2D kosong", "Isi nomor SP2D");
-    for (const [d, f] of [[spmTgl, "tanggal_spm"], [sp2dTgl, "tanggal_sp2d"]] as const) if (d && Number(d.slice(0, 4)) !== lk.year) err(f, `Tanggal ${d} di luar tahun anggaran ${lk.year}`, "Realisasi dicatat pada tahun anggaran yang sama dengan tanggal pencairan");
-    if (spmTgl && sp2dTgl && sp2dTgl < spmTgl) err("tanggal_sp2d", "Tanggal SP2D lebih awal dari tanggal SPM", "SP2D terbit setelah SPM; periksa kedua tanggal");
-
-    const docRaw = g("dokjenis"); let docType = docRaw ? DOC_MAP[alnum(docRaw)] : undefined;
-    if (docRaw && !docType) err("jenis_dokumen", `Jenis dokumen tidak dikenali: "${docRaw}"`, "Gunakan kuitansi, bast, invoice, sp2d, atau lainnya");
-    const docNo = g("doknomor") || sp2dNo || spmNo;
-    if (!docNo) err("nomor_dokumen", "Tidak ada nomor dokumen/SPM/SP2D", "Isi salah satu nomor agar transaksi tidak tercatat ganda saat file diunggah ulang");
-    else if (docNo.length > 100) err("nomor_dokumen", "Nomor terlalu panjang (maks. 100 karakter)", "Periksa kolom nomor");
-    if (!docType) docType = !g("doknomor") && sp2dNo ? "sp2d" : "lainnya";
+    // Satu pasangan Tanggal/No SPM-SP2D. Format lama (kolom SPM dan SP2D terpisah) tetap terbaca: SP2D diutamakan.
+    const dateParts = [parseDateCell(at(r, "paytgl")), parseDateCell(at(r, "sp2dtgl")), parseDateCell(at(r, "spmtgl"))];
+    if (dateParts.some((d) => d === null)) err("tanggal_spm_sp2d", `Tanggal tidak dapat dibaca: "${g("paytgl") || g("sp2dtgl") || g("spmtgl")}"`, "Gunakan format 15/03/2026");
+    const payDate = dateParts.find((d) => d) || null, payNo = (g("payno") || g("sp2dno") || g("spmno")) || null;
+    if (payDate && Number(payDate.slice(0, 4)) !== lk.year) err("tanggal_spm_sp2d", `Tanggal ${payDate} di luar tahun anggaran ${lk.year}`, "Realisasi dicatat pada tahun anggaran yang sama dengan tanggal SPM/SP2D");
+    if (payNo && payNo.length > 100) err("no_spm_sp2d", "Nomor terlalu panjang (maks. 100 karakter)", "Periksa kolom nomor");
     if (g("catatan").length > 500) err("catatan", "Catatan lebih dari 500 karakter", "Persingkat catatan");
+    let method: TxMethod | null = null;
+    if (g("metode")) { method = matchMethod(g("metode"), lk.methods); if (!method) err("metode_pemilihan", `Metode pemilihan tidak dikenali: "${g("metode")}"`, `Pilihan: ${lk.methods.map((m) => m.name).join(", ")}`); }
 
-    if (errors.length > before || !kind) continue;
-    const spmDate = spmTgl || null, sp2dDate = sp2dTgl || null;
-    const ref = referenceDate({ transactionDate: tanggal, spmDate, sp2dDate });
-    if (ref.basis !== "transaksi" && ref.date < tanggal) warn(`Tanggal ${ref.basis === "sp2d" ? "SP2D" : "SPM"} (${ref.date}) lebih awal dari tanggal transaksi (${tanggal}); tahapan mengikuti ${BASIS_LABEL[ref.basis].toLowerCase()}`);
+    if (errors.length > before) continue;
+    if (payNo && !payDate) warn("No SPM/SP2D diisi tanpa tanggal; tahapan mengikuti tanggal transaksi sampai tanggal SPM/SP2D dilengkapi");
+    const ref = referenceDate({ transactionDate: tanggal, paymentDate: payDate });
+    if (ref.basis === "spm_sp2d" && ref.date < tanggal) warn(`Tanggal SPM/SP2D (${ref.date}) lebih awal dari tanggal transaksi (${tanggal}); tahapan mengikuti tanggal SPM/SP2D`);
     const ver = resolveVersion(lk.versions, lk.year, ref.date);
     if (!ver) { err("tahapan", `Tidak ada tahapan anggaran yang berlaku pada ${ref.date} (${BASIS_LABEL[ref.basis].toLowerCase()})`, "Atur tanggal mulai berlaku tahapan di panel \"Aturan tahapan anggaran\" dan pastikan versi anggarannya sudah disiapkan"); continue; }
 
@@ -123,26 +122,22 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     if (pick.length > 1 && dana) pick = pick.filter((e) => e.fund.toUpperCase() === dana);
     if (pick.length > 1 && ur) { const exact = pick.filter((e) => norm(e.desc) === ur); pick = exact.length ? exact : pick.filter((e) => norm(e.desc).includes(ur)); }
     if (!pick.length) { err("kode_rekening", `Subkegiatan ${sub} + rekening ${acc} tidak ada pada anggaran ${ver.stageName} (berlaku ${ref.date})`,
-      cands.length ? "Sumber dana/uraian tidak cocok dengan rekening yang ada" : `Impor anggaran tahapan ${ver.stageName} lebih dulu, atau periksa tanggal SPM/SP2D dan kodenya`); continue; }
-    if (pick.length > 1) { err("kode_rekening", `Ada ${pick.length} rekening dengan subkegiatan + rekening yang sama pada ${ver.stageName}`, `Isi kode_sumber_dana atau uraian. Pilihan: ${pick.slice(0, 3).map((e) => `${e.fund} / ${e.desc.slice(0, 40)}`).join("; ")}`); continue; }
+      cands.length ? "Sumber dana tidak cocok dengan rekening yang ada" : `Impor anggaran tahapan ${ver.stageName} lebih dulu, atau periksa tanggal SPM/SP2D dan kodenya`); continue; }
+    if (pick.length > 1) { err("kode_rekening", `Ada ${pick.length} rekening dengan subkegiatan + rekening yang sama pada ${ver.stageName}`, `Isi kode_sumber_dana. Pilihan: ${pick.slice(0, 3).map((e) => `${e.fund} / ${e.desc.slice(0, 40)}`).join("; ")}`); continue; }
     const entry = pick[0]!;
 
-    let rupId: string | null = null, pkgId: string | null = null, rupCode = g("rup") || null; const pkgCode = g("paket") || null;
-    if (rupCode) { rupCode = rupCode.replace(/\.0+$/, ""); rupId = lk.rupByVersion.get(ver.id)?.get(rupCode) ?? null; if (!rupId) { err("kode_rup", `Kode RUP ${rupCode} tidak ada pada ${ver.stageName}`, "Sinkronkan RUP tahapan tersebut (menu Paket RUP), atau kosongkan bila belanja non-pengadaan"); continue; } }
-    if (pkgCode) {
-      const p = lk.pkgByVersion.get(ver.id)?.get(pkgCode); if (!p) { err("kode_paket", `Kode paket ${pkgCode} tidak ada pada ${ver.stageName}`, "Periksa kode paket di menu Proses pengadaan, atau kosongkan"); continue; }
-      if (rupId && p.rupId && p.rupId !== rupId) { err("kode_paket", `Paket ${pkgCode} bertaut ke RUP lain, bukan ${rupCode}`, "Samakan kode_rup dengan RUP paket, atau kosongkan salah satu"); continue; }
-      pkgId = p.id; if (!rupId && p.rupId) { rupId = p.rupId; rupCode = lk.rupCodeById?.get(p.rupId) ?? rupCode; }
-    }
-    if (!rupId && !pkgId) { const al = lk.allocRupByEntry?.get(entry.id); if (al?.length) warn(`Rekening ini dialokasikan ke RUP ${al.slice(0, 3).join(", ")}${al.length > 3 ? ", ..." : ""}; baris tanpa kode RUP dicatat sebagai non-pengadaan`); }
+    let rupId: string | null = null, rupCode = g("rup").replace(/\.0+$/, "") || null, rupMethod: string | null = null;
+    if (rupCode) { const rp = lk.rupByVersion.get(ver.id)?.get(rupCode); if (!rp) { err("kode_rup", `Kode RUP ${rupCode} tidak ada pada ${ver.stageName}`, "Sinkronkan RUP tahapan tersebut (menu Paket RUP), atau kosongkan bila belanja non-pengadaan"); continue; } rupId = rp.id; rupMethod = rp.methodId; }
+    if (!method && rupMethod) method = lk.methods.find((m) => m.id === rupMethod) ?? null;     // metode kosong: ikuti metode rencana pada RUP
+    if (!rupId) { const al = lk.allocRupByEntry?.get(entry.id); if (al?.length) warn(`Rekening ini dialokasikan ke RUP ${al.slice(0, 3).join(", ")}${al.length > 3 ? ", ..." : ""}; baris tanpa kode RUP dicatat sebagai non-pengadaan`); }
 
-    const key = [ver.id, entry.id, docType, docNo, kind].join("|"), dup = seen.get(key);
-    if (dup !== undefined) { err("nomor_dokumen", `Duplikat dengan baris ${dup} (rekening, jenis dokumen, nomor, dan jenis transaksi sama)`, "Gabungkan nilainya dalam satu baris atau bedakan nomor dokumennya"); continue; }
+    // Identitas baris (dipakai juga database untuk mengenali baris yang sudah tercatat): rekening + tanggal + nilai + RUP; nomor SPM/SP2D menjadi pembeda.
+    const key = [ver.id, entry.id, tanggal, amount, rupId ?? "", payNo ?? ""].join("|"), dup = seen.get(key);
+    if (dup !== undefined) { err("nilai", `Baris identik dengan baris ${dup} (rekening, tanggal, nilai, RUP, dan nomor SPM/SP2D sama)`, "Bila memang dua transaksi, bedakan No SPM/SP2D-nya; bila salah salin, hapus salah satu"); continue; }
     seen.set(key, r.n);
-    valid.push({ row: r.n, version_id: ver.id, stage_code: ver.stageCode, stage_name: ver.stageName, entry_id: entry.id, entry_label: `${entry.sub} / ${entry.acc}: ${entry.desc}`,
-      rup_package_id: rupId, rup_code: rupCode, procurement_package_id: pkgId, proses: rupId || pkgId ? "pengadaan" : "non_pengadaan", kind, doc_type: docType, doc_number: docNo!, doc_date: docTgl || null, transaction_date: tanggal,
-      spm_number: spmNo, spm_date: spmDate, sp2d_number: sp2dNo, sp2d_date: sp2dDate, ref_date: ref.date, basis: ref.basis, payment_status: paymentStatusOf({ spmDate, sp2dDate }),
-      amount: kind === "pembayaran" ? amount : `-${amount}`, notes: g("catatan") || null });
+    valid.push({ row: r.n, version_id: ver.id, stage_code: ver.stageCode, stage_name: ver.stageName, entry_id: entry.id, sub_id: entry.subId, acc_id: entry.accId, fund_id: entry.fundId, entry_label: `${entry.sub} / ${entry.acc}: ${entry.desc}`,
+      rup_package_id: rupId, rup_code: rupCode, method_id: method?.id ?? null, method_name: method?.name ?? null, proses: rupId || method ? "pengadaan" : "non_pengadaan",
+      transaction_date: tanggal, payment_date: payDate, payment_number: payNo, ref_date: ref.date, basis: ref.basis, payment_status: paymentStatusOf({ paymentDate: payDate }), amount, notes: g("catatan") || null });
   }
   return { valid, errors, warnings, skipped };
 }

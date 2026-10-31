@@ -19,14 +19,17 @@ Masuk memakai **username** (bukan email).
 Alternatif tanpa halaman setup (CLI):
 `node --env-file=.env.local scripts/create-user.mjs <username> "<Password>" "<Nama Lengkap>" super_admin`
 
-## Unggah realisasi (v1.4.0)
+## Unggah realisasi (v1.5.0, disederhanakan)
 
-1. **Jalankan** `supabase/migrations/20260112000000_realisasi_unggah.sql` (SQL Editor). Menambah tanggal berlaku tahapan, kolom SPM/SP2D, dan fungsi penerapan impor. Aman diulang.
-2. Menu **Input Realisasi > Unggah Excel/CSV**: atur tanggal mulai berlaku Pergeseran/Perubahan (Murni otomatis 1 Januari), unduh template, isi, lalu Periksa file dan Catat.
-3. **Aturan tahapan**: tanggal acuan = tanggal SP2D (sudah cair), kalau tidak ada tanggal SPM, kalau tidak ada tanggal transaksi. Tahapan = yang tanggal berlakunya terakhir tidak melewati tanggal acuan. Baris dengan kode RUP/paket = proses pengadaan; tanpa kode = non-pengadaan.
-4. Pratinjau dan penerapan memakai fungsi database yang sama (`apply_transaction_import`), sehingga pagu rekening, anggaran kas kumulatif, pagu RUP, dan dokumen ganda diperiksa persis seperti input manual. Pratinjau dibatalkan otomatis.
-5. Batas 2.000 baris per unggahan (±3 detik di database); file lebih besar dibagi beberapa bagian, dokumen yang sudah tercatat otomatis dilewati.
-6. Akuntabilitas: tiap unggahan tercatat (berkas, checksum, pengunggah, waktu), tiap transaksi menyimpan asal unggahan, dan semua perubahan masuk log audit. Verifikasi massal hanya admin.
+1. **Jalankan** `supabase/migrations/20260112000000_realisasi_unggah.sql` lalu `20260113000000_realisasi_sederhana.sql` (SQL Editor; aman diulang). Migrasi 13 memindahkan data SPM/SP2D lama ke kolom baru dan menghapus kolom lama; jenis/nomor/tanggal dokumen lama tetap tersimpan di database tetapi tidak dipakai lagi.
+2. **Template 10 kolom**: tanggal_transaksi, kode_subkegiatan, kode_rekening, kode_sumber_dana, kode_rup, metode_pemilihan, tanggal_spm_sp2d, no_spm_sp2d, nilai, catatan. Dihapus: jenis transaksi, jenis dokumen, nomor dokumen, tanggal dokumen, kode paket (disatukan menjadi kode RUP). Nilai minus = koreksi.
+3. **Aturan tahapan**: tanggal acuan = Tanggal SPM/SP2D bila ada, kalau tidak tanggal transaksi. Tahapan = yang tanggal berlakunya terakhir tidak melewati tanggal acuan (Murni otomatis 1 Januari; Pergeseran/Perubahan diatur admin di panel Aturan tahapan anggaran).
+4. **Metode pemilihan** memakai master `procurement_methods` (E-purchasing, Pengadaan Langsung, Penunjukan Langsung, Tender Cepat, Tender, Seleksi, Swakelola; Perpres 16/2018 jo. 12/2021 jo. 46/2025). Kosong + kode RUP terisi = mengikuti metode rencana RUP. Singkatan "PL" ditolak karena ambigu.
+5. **Memperbarui nomor**: baris dikenali dari tanggal transaksi + subkegiatan + rekening + sumber dana + nilai + kode RUP. Unggah ulang baris yang sama dengan nomor/tanggal SPM-SP2D/metode yang lebih lengkap memperbarui transaksi (tidak dicatat ganda); bila tanggal baru memindahkan tahapan, transaksi yang belum terverifikasi dipindah ke tahapan yang tepat. Bisa juga lewat tombol Lengkapi/Ubah di Daftar transaksi.
+6. **Terverifikasi**: nilai, rekening, tanggal transaksi, dan tahapan terkunci; tanggal/nomor SPM-SP2D dan metode hanya dapat dilengkapi bila masih kosong, setelah terisi terkunci.
+7. Pratinjau dan penerapan memakai fungsi database yang sama (`apply_transaction_import`); pratinjau dibatalkan otomatis. Batas 2.000 baris per unggahan (±3 detik di database).
+8. Akuntabilitas: tiap unggahan tercatat (berkas, checksum, pengunggah, waktu), tiap transaksi menyimpan asal unggahan, semua perubahan masuk log audit. Verifikasi massal hanya admin.
+9. File format lama tetap terbaca: kolom yang dihapus diabaikan dengan peringatan, SP2D diutamakan atas SPM, dan jenis koreksi/pembatalan tetap menjadi nilai minus.
 
 ## Performa (v1.3.0)
 

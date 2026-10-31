@@ -1,20 +1,18 @@
 /** Aturan penentuan tahapan anggaran (MURNI / PERGESERAN / PERUBAHAN) untuk sebuah transaksi. Murni dan terpusat agar mudah diuji. */
 export type StageVersion = { id: string; stageCode: string; stageName: string; sortOrder: number; versionNo: number; effectiveFrom: string | null };
-export type Basis = "sp2d" | "spm" | "transaksi";
-export const BASIS_LABEL: Record<Basis, string> = { sp2d: "Tanggal SP2D", spm: "Tanggal SPM", transaksi: "Tanggal transaksi" };
-export type PaymentStatus = "cair" | "spm" | "belum";
-export const PAYMENT_LABEL: Record<PaymentStatus, string> = { cair: "Sudah cair (SP2D)", spm: "SPM diajukan", belum: "Belum diajukan" };
+export type Basis = "spm_sp2d" | "transaksi";
+export const BASIS_LABEL: Record<Basis, string> = { spm_sp2d: "Tanggal SPM/SP2D", transaksi: "Tanggal transaksi" };
+export type PaymentStatus = "sudah" | "belum";
+export const PAYMENT_LABEL: Record<PaymentStatus, string> = { sudah: "Sudah SPM/SP2D", belum: "Belum SPM/SP2D" };
 
 /**
- * Tanggal acuan penentu tahapan: tanggal SP2D (pencairan) bila ada; bila belum cair, tanggal SPM; bila belum diajukan, tanggal transaksi.
- * Alasannya: realisasi belanja diakui saat dana dicairkan, dan tahapan anggaran yang berlaku pada saat itulah yang menjadi acuan.
+ * Tanggal acuan penentu tahapan: Tanggal SPM/SP2D bila sudah ada; bila belum, tanggal transaksi.
+ * Alasannya: realisasi belanja diakui saat dana diajukan/dicairkan, dan tahapan anggaran yang berlaku pada saat itulah yang menjadi acuan.
  */
-export function referenceDate(t: { transactionDate: string; spmDate?: string | null; sp2dDate?: string | null }): { date: string; basis: Basis } {
-  if (t.sp2dDate) return { date: t.sp2dDate, basis: "sp2d" };
-  if (t.spmDate) return { date: t.spmDate, basis: "spm" };
-  return { date: t.transactionDate, basis: "transaksi" };
+export function referenceDate(t: { transactionDate: string; paymentDate?: string | null }): { date: string; basis: Basis } {
+  return t.paymentDate ? { date: t.paymentDate, basis: "spm_sp2d" } : { date: t.transactionDate, basis: "transaksi" };
 }
-export const paymentStatusOf = (t: { spmDate?: string | null; sp2dDate?: string | null }): PaymentStatus => (t.sp2dDate ? "cair" : t.spmDate ? "spm" : "belum");
+export const paymentStatusOf = (t: { paymentDate?: string | null }): PaymentStatus => (t.paymentDate ? "sudah" : "belum");
 
 /** Tanggal mulai berlaku. Murni otomatis 1 Januari bila belum diatur; Pergeseran/Perubahan wajib diatur (null = tidak ikut dipilih). */
 export const effectiveStart = (v: StageVersion, year: number): string | null => v.effectiveFrom ?? (v.stageCode === "MURNI" ? `${year}-01-01` : null);

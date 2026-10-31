@@ -5,11 +5,10 @@ const V = (id: string, code: string, ord: number, from: string | null, no = 1): 
 const murni = V("m", "MURNI", 1, null), pergeseran = V("g", "PERGESERAN", 2, "2026-05-01"), perubahan = V("p", "PERUBAHAN", 3, "2026-09-01");
 const all = [murni, pergeseran, perubahan];
 
-describe("referenceDate: SP2D > SPM > tanggal transaksi", () => {
-  it("sudah cair memakai SP2D", () => expect(referenceDate({ transactionDate: "2026-04-10", spmDate: "2026-04-20", sp2dDate: "2026-05-02" })).toEqual({ date: "2026-05-02", basis: "sp2d" }));
-  it("SPM saja memakai SPM", () => expect(referenceDate({ transactionDate: "2026-04-10", spmDate: "2026-04-20" })).toEqual({ date: "2026-04-20", basis: "spm" }));
-  it("belum diajukan memakai tanggal transaksi", () => expect(referenceDate({ transactionDate: "2026-04-10", spmDate: null, sp2dDate: null })).toEqual({ date: "2026-04-10", basis: "transaksi" }));
-  it("status pencairan", () => { expect(paymentStatusOf({ sp2dDate: "2026-01-01" })).toBe("cair"); expect(paymentStatusOf({ spmDate: "2026-01-01" })).toBe("spm"); expect(paymentStatusOf({})).toBe("belum"); });
+describe("referenceDate: tanggal SPM/SP2D, bila belum ada tanggal transaksi", () => {
+  it("sudah ada tanggal SPM/SP2D: itu yang dipakai", () => expect(referenceDate({ transactionDate: "2026-04-10", paymentDate: "2026-05-02" })).toEqual({ date: "2026-05-02", basis: "spm_sp2d" }));
+  it("belum ada: tanggal transaksi", () => { expect(referenceDate({ transactionDate: "2026-04-10", paymentDate: null })).toEqual({ date: "2026-04-10", basis: "transaksi" }); expect(referenceDate({ transactionDate: "2026-04-10" })).toEqual({ date: "2026-04-10", basis: "transaksi" }); });
+  it("status SPM/SP2D", () => { expect(paymentStatusOf({ paymentDate: "2026-01-01" })).toBe("sudah"); expect(paymentStatusOf({})).toBe("belum"); });
 });
 describe("resolveVersion: tahapan berlaku pada tanggal acuan", () => {
   it("sebelum Pergeseran = Murni (otomatis berlaku 1 Januari)", () => { expect(resolveVersion(all, 2026, "2026-01-01")?.id).toBe("m"); expect(resolveVersion(all, 2026, "2026-04-30")?.id).toBe("m"); });
