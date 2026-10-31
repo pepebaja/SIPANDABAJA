@@ -22,8 +22,8 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   return { ok: true };
 }
 export async function verifyTransaction(fd: FormData): Promise<void> {
-  const id = String(fd.get("id")); if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/realisasi");
+  const id = String(fd.get("id")); if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/realisasi?tab=daftar");
   const { data, error } = await (await createClient()).from("transactions").update({ verification_status: "verified" }).eq("id", id).select("id");
-  if (error || !data?.length) redirect("/realisasi?error=verify");
+  if (error || !data?.length) redirect("/realisasi?tab=daftar&error=verify");
   revalidatePath("/realisasi");
 }
