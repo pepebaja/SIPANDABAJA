@@ -38,19 +38,43 @@ export async function verifyTransaction(fd: FormData): Promise<void> {
   if (error || !data?.length) redirect("/realisasi?tab=daftar&error=verify");
   revalidatePath("/realisasi");
 }
-/** Melengkapi/memperbarui Tanggal & No SPM/SP2D satu transaksi. Terverifikasi: hanya bagian yang masih kosong (dijaga database). Tanggal yang memindahkan tahapan harus lewat Unggah. */
+/**
+ * Melengkapi/memperbarui No SPM/SP2D (dan Tanggal SPM/SP2D) satu transaksi langsung di aplikasi.
+ * Tahapan mengikuti Tanggal SPM/SP2D (Murni < 16 Mar; Pergeseran 16 Mar - 26 Okt; Perubahan 27 Okt - 31 Des, dapat diatur admin):
+ * bila tanggal baru jatuh pada tahapan lain, transaksi yang BELUM terverifikasi otomatis dipindah ke rekening/RUP padanannya di tahapan itu.
+ * Terverifikasi: nomor/tanggal hanya dapat dilengkapi bila masih kosong (dijaga database) dan tidak boleh memindahkan tahapan.
+ */
 export async function updatePaymentInfo(fd: FormData): Promise<void> {
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect("/realisasi?tab=daftar&error=payment");
   const p = paymentUpdateSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) redirect("/realisasi?tab=daftar&error=payment");
   const sb = await createClient(), { id, payment_number, payment_date } = p.data;
-  const { data: row } = await sb.from("transactions").select("budget_version_id, transaction_date, payment_date, payment_number").eq("id", id).maybeSingle();
+  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, transaction_date, payment_date, payment_number, verification_status").eq("id", id).maybeSingle();
   if (!row) redirect("/realisasi?tab=daftar&error=payment");
+  const patch: Record<string, unknown> = {}; if (payment_number !== null) patch.payment_number = payment_number; if (payment_date !== null) patch.payment_date = payment_date;
   const ctx = await getBudgetContext();
   if (payment_date && payment_date !== row.payment_date && ctx) {
+    if (Number(payment_date.slice(0, 4)) !== ctx.year) redirect("/realisasi?tab=daftar&error=year");
     const ref = referenceDate({ transactionDate: row.transaction_date, paymentDate: payment_date }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
-    if (!ver || ver.id !== row.budget_version_id) redirect("/realisasi?tab=daftar&error=stage");
+    if (!ver) redirect("/realisasi?tab=daftar&error=stage");
+    if (ver.id !== row.budget_version_id) {
+      if (row.verification_status === "verified") redirect("/realisasi?tab=daftar&error=stage");      // terverifikasi: tahapan terkunci
+      // Pindah tahapan: cari rekening padanan (subkegiatan + rekening + sumber dana + uraian) dan RUP berkode sama pada tahapan tujuan.
+      const { data: cur } = await sb.from("budget_entries").select("subactivity_id, account_id, funding_source_id, description").eq("id", row.budget_entry_id).maybeSingle();
+      if (!cur) redirect("/realisasi?tab=daftar&error=move");
+      let q = sb.from("budget_entries").select("id, description").eq("budget_version_id", ver.id).eq("subactivity_id", cur.subactivity_id).eq("account_id", cur.account_id);
+      q = cur.funding_source_id ? q.eq("funding_source_id", cur.funding_source_id) : q.is("funding_source_id", null);
+      const { data: cands } = await q; let pick = cands ?? [];
+      if (pick.length > 1) { const same = pick.filter((e) => e.description === cur.description); if (same.length) pick = same; }
+      if (pick.length !== 1) redirect("/realisasi?tab=daftar&error=move");
+      patch.budget_version_id = ver.id; patch.budget_entry_id = pick[0]!.id;
+      if (row.rup_package_id) {
+        const { data: old } = await sb.from("rup_packages").select("rup_code").eq("id", row.rup_package_id).maybeSingle();
+        const { data: nw } = old ? await sb.from("rup_packages").select("id").eq("budget_version_id", ver.id).eq("rup_code", old.rup_code).maybeSingle() : { data: null };
+        if (!nw) redirect("/realisasi?tab=daftar&error=move");
+        patch.rup_package_id = nw.id;
+      }
+    }
   }
-  const patch: Record<string, unknown> = {}; if (payment_number !== null) patch.payment_number = payment_number; if (payment_date !== null) patch.payment_date = payment_date;
-  if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect("/realisasi?tab=daftar&error=payment"); }
-  revalidatePath("/realisasi");
+  if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect(`/realisasi?tab=daftar&error=${error.code === "P0001" ? "limit" : "payment"}`); }
+  revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
 }

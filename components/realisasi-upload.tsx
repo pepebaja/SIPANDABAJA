@@ -24,7 +24,7 @@ export function RealisasiUpload() {
     <div className="card space-y-5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><p className="eyebrow">Cara tercepat</p><h2>Unggah realisasi dari Excel atau CSV</h2>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">Isi hanya 5 kolom wajib: tanggal transaksi, subkegiatan, rekening, nilai, dan (bila pengadaan) kode RUP serta metode pemilihan. Sistem menentukan <b>tahapan anggaran</b> dari <b>tanggal SPM/SP2D</b> (atau tanggal transaksi bila belum ada), memeriksa pagu dan anggaran kas, dan mengenali baris yang sudah tercatat. <b>Nomor SPM/SP2D dapat dilengkapi kemudian</b> dengan mengunggah ulang. Tidak ada yang tersimpan sebelum Anda menekan Catat.</p></div>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">Isi hanya 5 kolom wajib: tanggal transaksi, subkegiatan, rekening, nilai, dan (bila pengadaan) kode RUP serta metode pemilihan. Sistem menentukan <b>tahapan anggaran</b> dari <b>tanggal SPM/SP2D</b> (atau tanggal transaksi bila belum ada), memeriksa pagu dan anggaran kas, dan mengenali baris yang sudah tercatat. <b>Kolom no_spm_sp2d boleh dikosongkan</b>: nomornya dapat diisi manual kapan saja di tab Daftar transaksi (tombol Lengkapi/Ubah), atau dengan mengunggah ulang. Tidak ada yang tersimpan sebelum Anda menekan Catat.</p></div>
         <div className="flex flex-wrap gap-2">
           <a href="/api/templates/realisasi" className="btn btn-ghost btn-sm"><Icon name="download" className="h-4 w-4" />Template Excel</a>
           <a href="/api/templates/realisasi?format=csv" className="btn btn-ghost btn-sm"><Icon name="download" className="h-4 w-4" />Template CSV</a>

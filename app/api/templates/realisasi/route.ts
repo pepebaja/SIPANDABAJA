@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 
 // Contoh baris (hapus sebelum mengunggah). Kolom: tanggal_transaksi, kode_subkegiatan, kode_rekening, kode_sumber_dana, kode_rup, metode_pemilihan, tanggal_spm_sp2d, no_spm_sp2d, nilai, catatan
 const EXAMPLES: (string | number | Date)[][] = [
-  [new Date("2026-03-10"), "1.01.01.2.01", "5.1.02.01.01.0024", "DAU", "12345678", "E-purchasing", new Date("2026-03-15"), "SP2D/001/2026", 15000000, "Contoh pengadaan yang sudah SP2D"],
-  [new Date("2026-03-20"), "1.01.01.2.01", "5.1.02.02.01.0001", "", "", "", "", "", 2500000, "Contoh non-pengadaan, belum SPM (nomor dapat dilengkapi dengan unggah ulang)"],
+  [new Date("2026-03-10"), "1.01.01.2.01", "5.1.02.01.01.0024", "DAU", "12345678", "E-purchasing", new Date("2026-03-15"), "", 15000000, "Contoh: tanggal SPM/SP2D 15/03/2026 masuk tahapan MURNI; no_spm_sp2d dikosongkan, diisi manual di aplikasi"],
+  [new Date("2026-06-20"), "1.01.01.2.01", "5.1.02.02.01.0001", "", "", "", new Date("2026-07-02"), "", 2500000, "Contoh: tanggal SPM/SP2D 02/07/2026 masuk tahapan PERGESERAN (16 Mar - 26 Okt)"],
+  [new Date("2026-11-05"), "1.01.01.2.01", "5.1.02.02.01.0001", "", "", "", new Date("2026-11-10"), "", 1000000, "Contoh: tanggal SPM/SP2D 10/11/2026 masuk tahapan PERUBAHAN (27 Okt - 31 Des)"],
 ];
 // Daftar bawaan bila master tidak terbaca. Sumber: Perpres 16/2018 jo. 12/2021 jo. 46/2025.
 const DEFAULT_METHODS = ["E-purchasing", "Pengadaan Langsung", "Penunjukan Langsung", "Tender Cepat", "Tender", "Seleksi", "Swakelola"];
@@ -36,12 +37,12 @@ export async function GET(req: Request) {
    ["kode_sumber_dana", "Diisi bila subkegiatan + rekening yang sama memiliki lebih dari satu sumber dana (mis. DAU, DBHCHT)."],
    ["kode_rup", "Kode RUP/ID SIRUP. ISI bila belanja termasuk proses pengadaan; KOSONGKAN untuk belanja non-pengadaan. Kode harus ada di arsip RUP tahapan terkait."],
    ["metode_pemilihan", `Opsional. Pilihan: ${methods.join(", ")}. Bila kosong dan kode_rup diisi, dipakai metode rencana pada RUP. Singkatan "PL" tidak diterima (ambigu), tulis lengkap.`],
-   ["tanggal_spm_sp2d", "Tanggal SPM atau SP2D (pilih satu yang Anda pegang; isi SP2D bila sudah cair). INI TANGGAL UTAMA penentu tahapan anggaran. Boleh dikosongkan bila belum diajukan, lalu dilengkapi dengan unggah ulang."],
-   ["no_spm_sp2d", "Nomor SPM atau SP2D. Boleh kosong dahulu; dapat diperbarui kapan saja dengan mengunggah ulang baris yang sama (tanggal transaksi, rekening, kode RUP, dan nilai harus sama)."],
+   ["tanggal_spm_sp2d", "Tanggal SPM atau SP2D (pilih satu yang Anda pegang; isi SP2D bila sudah cair). INI TANGGAL UTAMA penentu tahapan anggaran: sebelum 16 Maret 2026 = MURNI; 16 Maret s.d. 26 Oktober 2026 = PERGESERAN; 27 Oktober s.d. 31 Desember 2026 = PERUBAHAN. Boleh dikosongkan bila belum diajukan (tahapan sementara mengikuti tanggal_transaksi), lalu dilengkapi di aplikasi."],
+   ["no_spm_sp2d", "OPSIONAL, boleh dikosongkan. Nomor SPM atau SP2D dapat DIISI MANUAL kapan saja di aplikasi: menu Input Realisasi > Daftar transaksi > tombol \"Isi No SPM/SP2D\" pada baris transaksi. Bisa juga diperbarui dengan mengunggah ulang baris yang sama (tanggal transaksi, rekening, kode RUP, dan nilai harus sama)."],
    ["nilai *", "Angka rupiah, mis. 1500000 atau 1.500.000,00. Isi MINUS (-) untuk koreksi/pengurangan realisasi."],
    ["catatan", "Opsional, maks. 500 karakter."],
    ["", ""],
-   ["Penentuan tahapan", "Tahapan anggaran (Murni / Pergeseran / Perubahan) ditentukan dari tanggal SPM/SP2D; bila kosong, dari tanggal transaksi. Tahapan yang berlaku = tahapan dengan tanggal mulai berlaku terakhir yang tidak melewati tanggal itu (diatur di panel Aturan tahapan anggaran)."],
+   ["Penentuan tahapan", "Tahapan anggaran (Murni / Pergeseran / Perubahan) ditentukan dari tanggal SPM/SP2D; bila kosong, dari tanggal transaksi. Aturan bawaan 2026: sebelum 16 Maret = Murni; 16 Maret s.d. 26 Oktober = Pergeseran; 27 Oktober s.d. 31 Desember = Perubahan (dapat diatur admin di panel Aturan tahapan anggaran)."],
    ["Proses pengadaan", "Baris dengan kode RUP atau metode pemilihan dicatat sebagai proses pengadaan; selain itu non-pengadaan."],
    ["Unggah ulang", "Baris yang sudah tercatat dikenali otomatis (tidak dicatat ganda). Bila nomor/tanggal SPM-SP2D atau metode pada file lebih lengkap, transaksi DIPERBARUI. Transaksi yang sudah terverifikasi hanya dapat dilengkapi bagian yang masih kosong."],
    ["Catatan", "Hapus baris contoh sebelum mengunggah. Semua baris baru masuk sebagai belum diverifikasi sampai admin memverifikasi."]].forEach((r, i) => { const row = h.addRow(r); if (i === 0) row.font = { bold: true }; });

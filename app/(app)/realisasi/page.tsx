@@ -63,7 +63,10 @@ async function DaftarTab({ sb, vid, sp, canWrite }: { sb: SupabaseClient; vid: s
   return (
     <div className="space-y-3">
       {sp.error === "payment" && <p role="alert" className="alert alert-error">Perubahan SPM/SP2D ditolak. Transaksi terverifikasi hanya dapat dilengkapi bagian yang masih kosong.</p>}
-      {sp.error === "stage" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D itu masuk tahapan anggaran yang lain. Pemindahan tahapan dilakukan lewat tab Unggah (baris yang sama diunggah ulang dengan tanggal baru).</p>}
+      {sp.error === "year" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D harus berada pada tahun anggaran yang dipilih.</p>}
+      {sp.error === "move" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D itu memindahkan transaksi ke tahapan lain, tetapi rekening (subkegiatan + rekening + sumber dana) atau kode RUP padanannya tidak ditemukan/ tidak unik pada tahapan tujuan. Impor anggaran/RUP tahapan tersebut lebih dulu.</p>}
+      {sp.error === "limit" && <p role="alert" className="alert alert-error">Perubahan ditolak karena melampaui batas pagu/anggaran kas pada tahapan tujuan.</p>}
+      {sp.error === "stage" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D itu tidak berlaku pada tahapan yang tersedia, atau memindahkan transaksi terverifikasi ke tahapan lain (tahapan transaksi terverifikasi terkunci).</p>}
       <div className="space-y-2" role="group" aria-label="Filter">
         {group("Verifikasi", "status", status, [["", "Semua"], ["unverified", "Belum diverifikasi"], ["verified", "Terverifikasi"]])}
         {!legacy && group("SPM/SP2D", "pay", pay, [["", "Semua"], ["sudah", "Sudah ada"], ["belum", "Belum ada"]])}
@@ -75,11 +78,11 @@ async function DaftarTab({ sb, vid, sp, canWrite }: { sb: SupabaseClient; vid: s
             <tr key={r.id}><td className="whitespace-nowrap">{fmtDate(r.transaction_date)}</td>
               {!legacy && <td className="min-w-44 text-sm">
                 {r.payment_date || r.payment_number ? <>{r.payment_date ? fmtDate(r.payment_date) : <span className="text-slate-500">tanggal belum diisi</span>}<span className="block text-xs text-slate-600">{r.payment_number ?? "nomor belum diisi"}</span></> : <span className="text-slate-500">belum ada SPM/SP2D</span>}
-                {canWrite && !locked && <details className="mt-1"><summary className="link cursor-pointer text-xs">{r.payment_date && r.payment_number ? "Ubah" : "Lengkapi"}</summary>
+                {canWrite && !locked && <details className="mt-1"><summary className="link cursor-pointer text-xs">{r.payment_date && r.payment_number ? "Ubah No/Tgl SPM-SP2D" : "Isi No SPM/SP2D"}</summary>
                   <form action={updatePaymentInfo} className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2"><input type="hidden" name="id" value={r.id} />
                     {(!r.payment_date || r.verification_status !== "verified") && <label className="block text-xs">Tanggal SPM/SP2D<input type="date" name="payment_date" defaultValue={r.payment_date ?? ""} className="mt-0.5 w-full py-1" /></label>}
-                    {(!r.payment_number || r.verification_status !== "verified") && <label className="block text-xs">No SPM/SP2D<input name="payment_number" defaultValue={r.payment_number ?? ""} maxLength={100} className="mt-0.5 w-full py-1" /></label>}
-                    <button className="btn btn-ghost btn-sm">Simpan</button></form></details>}</td>}
+                    {(!r.payment_number || r.verification_status !== "verified") && <label className="block text-xs">No SPM/SP2D (isi manual)<input name="payment_number" defaultValue={r.payment_number ?? ""} maxLength={100} className="mt-0.5 w-full py-1" /></label>}
+                    <p className="text-[11px] text-slate-500">Tahapan mengikuti Tanggal SPM/SP2D (Murni &lt; 16 Mar; Pergeseran 16 Mar-26 Okt; Perubahan 27 Okt-31 Des). Bila tanggal pindah tahapan, transaksi belum terverifikasi dipindah otomatis.</p><button className="btn btn-ghost btn-sm">Simpan</button></form></details>}</td>}
               <td className="min-w-48 text-sm">{label(r)}</td>
               <td className="text-sm">{r.rup_packages?.rup_code ? <>RUP {r.rup_packages.rup_code}</> : <span className="text-slate-500">{r.procurement_methods?.name ? "Tanpa RUP" : "Non-pengadaan"}</span>}{r.procurement_methods?.name && <span className="block text-xs text-slate-600">{r.procurement_methods.name}</span>}</td>
               <td className={`text-right tabular-nums ${Number(r.amount) < 0 ? "text-amber-800" : ""}`}>{rp(r.amount)}{Number(r.amount) < 0 && <span className="block text-xs">koreksi</span>}</td>
