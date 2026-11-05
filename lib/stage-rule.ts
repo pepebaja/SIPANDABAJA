@@ -14,8 +14,16 @@ export function referenceDate(t: { transactionDate: string; paymentDate?: string
 }
 export const paymentStatusOf = (t: { paymentDate?: string | null }): PaymentStatus => (t.paymentDate ? "sudah" : "belum");
 
-/** Tanggal mulai berlaku. Murni otomatis 1 Januari bila belum diatur; Pergeseran/Perubahan wajib diatur (null = tidak ikut dipilih). */
-export const effectiveStart = (v: StageVersion, year: number): string | null => v.effectiveFrom ?? (v.stageCode === "MURNI" ? `${year}-01-01` : null);
+/**
+ * Tanggal mulai berlaku bawaan (bulan-tanggal) bila admin belum mengaturnya di panel Aturan tahapan anggaran:
+ *  - Murni      : sebelum 16 Maret (berlaku sejak 1 Januari)
+ *  - Pergeseran : 16 Maret s.d. 26 Oktober
+ *  - Perubahan  : 27 Oktober s.d. 31 Desember
+ * Admin tetap dapat mengubahnya; nilai yang disimpan admin selalu didahulukan.
+ */
+export const DEFAULT_STAGE_START: Record<string, string> = { MURNI: "01-01", PERGESERAN: "03-16", PERUBAHAN: "10-27" };
+/** Tanggal mulai berlaku: nilai yang diatur admin, kalau kosong memakai tanggal bawaan di atas. */
+export const effectiveStart = (v: StageVersion, year: number): string | null => v.effectiveFrom ?? (DEFAULT_STAGE_START[v.stageCode] ? `${year}-${DEFAULT_STAGE_START[v.stageCode]}` : null);
 
 /** Versi terbaru (nomor versi tertinggi) untuk setiap tahapan. */
 export function latestPerStage(vs: StageVersion[]): StageVersion[] {
