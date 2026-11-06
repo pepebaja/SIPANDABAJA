@@ -42,16 +42,16 @@ export async function verifyTransaction(fd: FormData): Promise<void> {
  * Melengkapi/memperbarui No SPM/SP2D (dan Tanggal SPM/SP2D) satu transaksi langsung di aplikasi.
  * Tahapan mengikuti Tanggal SPM/SP2D (Murni < 16 Mar; Pergeseran 16 Mar - 26 Okt; Perubahan 27 Okt - 31 Des, dapat diatur admin):
  * bila tanggal baru jatuh pada tahapan lain, transaksi yang BELUM terverifikasi otomatis dipindah ke rekening/RUP padanannya di tahapan itu.
- * Terverifikasi: nomor/tanggal hanya dapat dilengkapi bila masih kosong (dijaga database) dan tidak boleh memindahkan tahapan.
+ * Kode RUP juga boleh dilengkapi menyusul lewat fungsi ini. Terverifikasi: nomor/tanggal/RUP hanya dapat dilengkapi bila masih kosong dan tidak boleh memindahkan tahapan.
  */
 export async function updatePaymentInfo(fd: FormData): Promise<void> {
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect("/realisasi?tab=daftar&error=payment");
   const p = paymentUpdateSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) redirect("/realisasi?tab=daftar&error=payment");
-  const sb = await createClient(), { id, payment_number, payment_date } = p.data;
-  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, transaction_date, payment_date, payment_number, verification_status").eq("id", id).maybeSingle();
+  const sb = await createClient(), { id, payment_number, payment_date, rup_code } = p.data;
+  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, transaction_date, payment_date, payment_number, verification_status").eq("id", id).maybeSingle();
   if (!row) redirect("/realisasi?tab=daftar&error=payment");
   const patch: Record<string, unknown> = {}; if (payment_number !== null) patch.payment_number = payment_number; if (payment_date !== null) patch.payment_date = payment_date;
-  const ctx = await getBudgetContext();
+  const ctx = await getBudgetContext(); let targetVid: string = row.budget_version_id as string;
   if (payment_date && payment_date !== row.payment_date && ctx) {
     if (Number(payment_date.slice(0, 4)) !== ctx.year) redirect("/realisasi?tab=daftar&error=year");
     const ref = referenceDate({ transactionDate: row.transaction_date, paymentDate: payment_date }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
@@ -66,14 +66,22 @@ export async function updatePaymentInfo(fd: FormData): Promise<void> {
       const { data: cands } = await q; let pick = cands ?? [];
       if (pick.length > 1) { const same = pick.filter((e) => e.description === cur.description); if (same.length) pick = same; }
       if (pick.length !== 1) redirect("/realisasi?tab=daftar&error=move");
-      patch.budget_version_id = ver.id; patch.budget_entry_id = pick[0]!.id;
-      if (row.rup_package_id) {
+      patch.budget_version_id = ver.id; patch.budget_entry_id = pick[0]!.id; targetVid = ver.id;
+      if (row.rup_package_id && !rup_code) {
         const { data: old } = await sb.from("rup_packages").select("rup_code").eq("id", row.rup_package_id).maybeSingle();
         const { data: nw } = old ? await sb.from("rup_packages").select("id").eq("budget_version_id", ver.id).eq("rup_code", old.rup_code).maybeSingle() : { data: null };
         if (!nw) redirect("/realisasi?tab=daftar&error=move");
         patch.rup_package_id = nw.id;
       }
     }
+  }
+  // Kode RUP boleh menyusul: dilengkapi di sini (harus ada pada arsip RUP tahapan tujuan). Terverifikasi: hanya bila masih kosong.
+  if (rup_code) {
+    const code = rup_code.replace(/\.0+$/, "");
+    if (row.verification_status === "verified" && row.rup_package_id) redirect("/realisasi?tab=daftar&error=payment");
+    const { data: rp } = await sb.from("rup_packages").select("id, planned_method_id").eq("budget_version_id", targetVid).eq("rup_code", code).maybeSingle();
+    if (!rp) redirect("/realisasi?tab=daftar&error=rup");
+    patch.rup_package_id = rp.id; if (!row.procurement_method_id && rp.planned_method_id) patch.procurement_method_id = rp.planned_method_id;   // metode kosong: ikut metode rencana RUP
   }
   if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect(`/realisasi?tab=daftar&error=${error.code === "P0001" ? "limit" : "payment"}`); }
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");

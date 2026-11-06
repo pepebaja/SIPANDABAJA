@@ -35,7 +35,7 @@ export async function GET(req: Request) {
    ["kode_subkegiatan *", "Kode subkegiatan sesuai arsip Anggaran (harus sama dengan DPA)."],
    ["kode_rekening *", "Kode rekening belanja sesuai arsip Anggaran."],
    ["kode_sumber_dana", "Diisi bila subkegiatan + rekening yang sama memiliki lebih dari satu sumber dana (mis. DAU, DBHCHT)."],
-   ["kode_rup", "Kode RUP/ID SIRUP. ISI bila belanja termasuk proses pengadaan; KOSONGKAN untuk belanja non-pengadaan. Kode harus ada di arsip RUP tahapan terkait."],
+   ["kode_rup", "Kode RUP/ID SIRUP. OPSIONAL, boleh dikosongkan dan diisi menyusul. Bila belanja termasuk proses pengadaan, isi kodenya sekarang atau lengkapi kemudian di aplikasi (Input Realisasi > Daftar transaksi > \"Isi No SPM/SP2D / RUP\"). Kosongkan untuk belanja non-pengadaan. Kode harus ada di arsip RUP tahapan terkait."],
    ["metode_pemilihan", `Opsional. Pilihan: ${methods.join(", ")}. Bila kosong dan kode_rup diisi, dipakai metode rencana pada RUP. Singkatan "PL" tidak diterima (ambigu), tulis lengkap.`],
    ["tanggal_spm_sp2d", "Tanggal SPM atau SP2D (pilih satu yang Anda pegang; isi SP2D bila sudah cair). INI TANGGAL UTAMA penentu tahapan anggaran: sebelum 16 Maret 2026 = MURNI; 16 Maret s.d. 26 Oktober 2026 = PERGESERAN; 27 Oktober s.d. 31 Desember 2026 = PERUBAHAN. Boleh dikosongkan bila belum diajukan (tahapan sementara mengikuti tanggal_transaksi), lalu dilengkapi di aplikasi."],
    ["no_spm_sp2d", "OPSIONAL, boleh dikosongkan. Nomor SPM atau SP2D dapat DIISI MANUAL kapan saja di aplikasi: menu Input Realisasi > Daftar transaksi > tombol \"Isi No SPM/SP2D\" pada baris transaksi. Bisa juga diperbarui dengan mengunggah ulang baris yang sama (tanggal transaksi, rekening, kode RUP, dan nilai harus sama)."],
