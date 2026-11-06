@@ -12,4 +12,4 @@ export const transactionSchema = z.object({
   amount: z.string().transform((v, ctx) => { const p = parseRupiah(v); if (p === null || toCents(p) === 0n) { ctx.addIssue({ code: "custom", message: "Nilai harus angka rupiah dan tidak boleh nol (minus untuk koreksi)" }); return z.NEVER; } return p; }),
   notes: optText(500, "Catatan maksimal 500 karakter"),
 }).transform((d) => ({ ...d, kind: d.amount.startsWith("-") ? "koreksi" : "pembayaran" }));
-export const paymentUpdateSchema = z.object({ id: z.string().uuid(), payment_number: optText(100, "No SPM/SP2D maksimal 100 karakter"), payment_date: optDate });
+export const paymentUpdateSchema = z.object({ id: z.string().uuid(), payment_number: optText(100, "No SPM/SP2D maksimal 100 karakter"), payment_date: optDate, rup_code: optText(50, "Kode RUP maksimal 50 karakter") });

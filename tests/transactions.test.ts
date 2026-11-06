@@ -18,7 +18,7 @@ describe("transactionSchema (input manual, format sederhana)", () => {
 });
 describe("paymentUpdateSchema", () => {
   it("id wajib UUID; nomor/tanggal opsional", () => {
-    expect(paymentUpdateSchema.parse({ id: E, payment_number: "", payment_date: "" })).toEqual({ id: E, payment_number: null, payment_date: null });
+    expect(paymentUpdateSchema.parse({ id: E, payment_number: "", payment_date: "" })).toEqual({ id: E, payment_number: null, payment_date: null, rup_code: null });
     expect(paymentUpdateSchema.safeParse({ id: "x" }).success).toBe(false);
   });
 });
