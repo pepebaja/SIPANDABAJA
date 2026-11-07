@@ -112,3 +112,7 @@ Super Admin atau Admin OPD mengisi nama OPD, alamat, kota, dan pejabat penandata
 
 `npm install`, salin `.env.example` ke `.env.local`, `npm run dev`. Tes: `npm test`, `npm run typecheck`.
 Service-role key hanya untuk server/skrip.
+
+## Tambahan: anggaran kas antartahapan dan laporan kinerja
+- **Anggaran kas**: di menu Anggaran kas tersedia tombol *Salin anggaran kas* yang menyalin kas tahapan sebelumnya (Murni → Pergeseran → Perubahan) lalu dapat disesuaikan lewat input manual/unggah Excel. Sub kegiatan dan belanja baru (setelah anggaran tahapan itu diimpor) dibiarkan kosong untuk diisi.
+- **Laporan kinerja pejabat pengadaan**: Laporan & dokumen > *Laporan kinerja pejabat pengadaan* (`/laporan/kinerja-pengadaan`), berformat presentasi dengan kerangka tata naskah dinas, filter pejabat, dan cetak/PDF.
