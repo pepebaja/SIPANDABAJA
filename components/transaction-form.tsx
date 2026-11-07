@@ -68,7 +68,7 @@ export function TransactionForm({ year, entries, rups, methods, allocByRup, hasC
           <p className="text-xs text-slate-500">Sisa dihitung dari semua transaksi tercatat . Kas triwulan berikutnya tidak dapat dipakai untuk triwulan sebelumnya.</p>
         </div>)}
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="block text-sm font-medium">Tanggal SPM/SP2D <span className="font-normal text-slate-500">(penentu tahapan)</span><input type="date" name="payment_date" className={cls} /></label>
+        <label className="block text-sm font-medium">Tanggal SPM/SP2D <span className="font-normal text-slate-500">(penentu tahapan &amp; pengakuan realisasi)</span><input type="date" name="payment_date" className={cls} /><span className="mt-1 block text-xs font-normal text-slate-600">Boleh dikosongkan: transaksi dicatat sebagai <b>dalam proses</b> (belum diakui sebagai realisasi, tetap menahan pagu) dan baru diakui setelah tanggal ini diisi lewat Daftar transaksi &gt; Ubah. Tahapan sementara mengikuti tanggal transaksi.</span></label>
         <label className="block text-sm font-medium">No SPM/SP2D <span className="font-normal text-slate-500">(dapat dilengkapi kemudian)</span><input name="payment_number" maxLength={100} className={cls} /></label>
         <label className="block text-sm font-medium">Catatan<input name="notes" maxLength={500} className={cls} /></label>
       </div>

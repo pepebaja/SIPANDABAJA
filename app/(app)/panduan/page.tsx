@@ -14,7 +14,7 @@ const TERMS: [string, string][] = [
   ["Kontrak/SP", "Kontrak, SPK, atau Surat Pesanan. Nilainya adalah komitmen, BUKAN realisasi keuangan."],
   ["Anggaran kas kumulatif", "Sisa kas triwulan sebelumnya dapat dipakai pada triwulan berikutnya; kas triwulan yang akan datang tidak dapat dipakai untuk belanja triwulan sebelumnya. Triwulan ditentukan dari tanggal transaksi."],
   ["Tanggal acuan tahapan", "Tahapan anggaran (Murni/Pergeseran/Perubahan) sebuah transaksi ditentukan oleh Tanggal SPM/SP2D bila sudah ada, atau tanggal transaksi bila belum. Tahapan yang berlaku = tahapan dengan tanggal mulai berlaku terakhir yang tidak melewati tanggal acuan."],
-  ["Realisasi", "Belanja yang dicatat lewat transaksi. Realisasi bersifat berkelanjutan: angka tahapan Pergeseran memuat realisasi Murni, dan angka Perubahan memuat realisasi Murni dan Pergeseran."],
+  ["Realisasi", "Belanja yang dicatat lewat transaksi dan sudah memiliki Tanggal SPM/SP2D (diakui). Transaksi tanpa tanggal tersebut berstatus dalam proses: tidak dihitung sebagai realisasi, tetapi tetap menahan pagu. Realisasi bersifat berkelanjutan: angka tahapan Pergeseran memuat realisasi Murni, dan angka Perubahan memuat realisasi Murni dan Pergeseran."],
 ];
 const FLOW: [string, string, string][] = [
   ["Pilih tahun dan tahapan", "Bagian atas layar", "Semua data mengikuti tahun anggaran dan tahapan (Murni/Pergeseran/Perubahan) yang dipilih."],
