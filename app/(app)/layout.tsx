@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [base, session] = await Promise.all([getContextBase(), getSession()]); // dibagi dengan halaman: tanpa kueri ganda
   const { years, stages, orgName } = base, { y, s } = pickContext(years, stages, base.saved);
   const groups: NavGroup[] = [
-    { title: "Utama", items: [{ href: "/", label: "Beranda", icon: "home" }, { href: "/anggaran/impor", label: "Impor anggaran", icon: "upload" }, { href: "/rup", label: "Paket RUP", icon: "file" },
+    { title: "Utama", items: [{ href: "/", label: "Beranda", icon: "home" }, { href: "/anggaran/impor", label: "Impor anggaran", icon: "upload" }, { href: "/anggaran/kelola", label: "Kelola anggaran", icon: "file" }, { href: "/rup", label: "Paket RUP", icon: "file" },
       { href: "/kas", label: "Anggaran kas", icon: "wallet" }, { href: "/realisasi", label: "Input Realisasi", icon: "chart", also: ["/paket"] }, { href: "/laporan", label: "Laporan & dokumen", icon: "printer" }] },
     { title: "Pengelolaan", items: [{ href: "/master", label: "Master data", icon: "database" },
       ...(session && can(session.roles, "users:read") ? [{ href: "/pengguna", label: "Pengguna", icon: "users" as const }] : []),

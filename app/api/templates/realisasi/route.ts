@@ -45,8 +45,8 @@ export async function GET(req: Request) {
    ["", ""],
    ["Penentuan tahapan", "Tahapan anggaran (Murni / Pergeseran / Perubahan) ditentukan dari tanggal SPM/SP2D; bila kosong, dari tanggal transaksi. Aturan bawaan 2026: sebelum 16 Maret = Murni; 16 Maret s.d. 26 Oktober = Pergeseran; 27 Oktober s.d. 31 Desember = Perubahan (dapat diatur admin di panel Aturan tahapan anggaran)."],
    ["Proses pengadaan", "Baris dengan kode RUP atau metode pemilihan dicatat sebagai proses pengadaan; selain itu non-pengadaan."],
-   ["Unggah ulang", "Baris yang sudah tercatat dikenali otomatis (tidak dicatat ganda). Bila nomor/tanggal SPM-SP2D atau metode pada file lebih lengkap, transaksi DIPERBARUI. Transaksi yang sudah terverifikasi hanya dapat dilengkapi bagian yang masih kosong."],
-   ["Catatan", "Baris jumlah/total di bagian bawah (tanpa tanggal, subkegiatan, rekening) dilewati otomatis. Hapus baris contoh sebelum mengunggah. Semua baris baru masuk sebagai belum diverifikasi sampai admin memverifikasi."]].forEach((r, i) => { const row = h.addRow(r); if (i === 0) row.font = { bold: true }; });
+   ["Unggah ulang", "Baris yang sudah tercatat dikenali otomatis (tidak dicatat ganda). Bila nomor/tanggal SPM-SP2D atau metode pada file lebih lengkap, transaksi DIPERBARUI."],
+   ["Catatan", "Baris jumlah/total di bagian bawah (tanpa tanggal, subkegiatan, rekening) dilewati otomatis. Hapus baris contoh sebelum mengunggah. Semua baris langsung berlaku (tanpa verifikasi) dan dapat diubah/dihapus di aplikasi."]].forEach((r, i) => { const row = h.addRow(r); if (i === 0) row.font = { bold: true }; });
   h.getColumn(1).width = 26; h.getColumn(2).width = 110; h.getColumn(2).alignment = { wrapText: true, vertical: "top" };
   return new Response(await wb.xlsx.writeBuffer(), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="template-realisasi.xlsx"', "Cache-Control": "no-store" } });
 }

@@ -30,7 +30,7 @@ export function TransactionForm({ year, entries, rups, methods, allocByRup, hasC
   const f = (v: string) => formatRupiah(v);
   return (
     <form action={action} className="card space-y-4 p-4">
-      <h2 className="font-semibold">Catat realisasi <span className="text-xs font-normal text-slate-500">(masuk sebagai belum diverifikasi)</span></h2>
+      <h2 className="font-semibold">Catat realisasi</h2>
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="space-y-1"><label className="block text-sm font-medium">1. Kode RUP <span className="font-normal text-slate-500">(kosongkan bila belanja non-pengadaan)</span></label>
           <input value={qRup} onChange={(e) => setQRup(e.target.value)} placeholder="Cari kode atau nama RUP" className="w-full py-1.5" aria-label="Cari RUP" />
@@ -65,7 +65,7 @@ export function TransactionForm({ year, entries, rups, methods, allocByRup, hasC
               <tr className="font-semibold"><td>Sisa kas kumulatif</td>{lim.rows.map((r) => <td key={r.quarter} className={`text-right tabular-nums ${q === r.quarter ? "bg-cyan-50" : ""}`}>{f(r.left)}</td>)}</tr></tbody></table></div>
           {!hasCashPlan || lim.rows.every((r) => toCents(r.cash) === 0n) ? <p className="alert alert-warn">Anggaran kas rekening ini belum diisi (menu Anggaran kas). Pembayaran akan ditolak sampai kas diisi.</p> : null}
           {isPayment && <p className={`text-sm ${over ? "font-semibold text-red-700" : "text-slate-700"}`}>Maksimal yang dapat dicatat pada {q ? QUARTER_SHORT[q - 1] : "tanggal ini"}: <b>{f(lim.max)}</b> <span className="text-slate-500">(dibatasi oleh {lim.limitedBy === "kas" ? "sisa kas kumulatif" : lim.limitedBy === "pagu" ? "pagu rekening" : "pagu RUP"})</span>{over && " - nilai melebihi batas, akan ditolak."}</p>}
-          <p className="text-xs text-slate-500">Sisa dihitung dari semua transaksi tercatat (terverifikasi maupun belum). Kas triwulan berikutnya tidak dapat dipakai untuk triwulan sebelumnya.</p>
+          <p className="text-xs text-slate-500">Sisa dihitung dari semua transaksi tercatat . Kas triwulan berikutnya tidak dapat dipakai untuk triwulan sebelumnya.</p>
         </div>)}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm font-medium">Tanggal SPM/SP2D <span className="font-normal text-slate-500">(penentu tahapan)</span><input type="date" name="payment_date" className={cls} /></label>

@@ -70,7 +70,7 @@ export function RealisasiUpload() {
             <form action={confirm} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <input type="hidden" name="jobId" value={s.jobId} />
               {problems && <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" name="skip" required />Catat hanya baris yang lolos pemeriksaan; {s.failed} baris bermasalah diabaikan (perbaiki lalu unggah ulang)</label>}
-              <p className="text-xs text-slate-600">Transaksi baru masuk sebagai <b>belum diverifikasi</b> (admin memverifikasinya dari tab Riwayat unggahan). Transaksi yang sudah terverifikasi hanya dapat dilengkapi bagian yang masih kosong (tanggal/nomor SPM-SP2D, metode); nilai dan rekening tidak berubah.</p>
+              <p className="text-xs text-slate-600">Transaksi langsung berlaku (tanpa verifikasi). Baris yang sudah tercatat dikenali dan dilengkapi; ubah atau hapus transaksi kapan saja di tab Daftar transaksi.</p>
               <button disabled={confirming} className="btn btn-dark">{confirming ? "Mencatat..." : `Catat ${s.wouldInsert} baru${s.wouldUpdate ? ` dan perbarui ${s.wouldUpdate}` : ""}`}</button>
             </form>)}
           {c.error && <p role="alert" className="alert alert-error">{c.error}</p>}

@@ -6,7 +6,7 @@ import { getBudgetContext } from "@/lib/server/budget-context";
 import { getSession } from "@/lib/server/session";
 import { loadStageVersions } from "@/lib/server/stage-versions";
 import { can } from "@/lib/rbac";
-import { paymentUpdateSchema, transactionSchema } from "@/lib/transactions";
+import { transactionEditSchema, transactionSchema } from "@/lib/transactions";
 import { referenceDate, resolveVersion } from "@/lib/stage-rule";
 import type { FormState } from "../master/actions";
 
@@ -32,32 +32,28 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   revalidatePath("/realisasi"); revalidatePath("/rup");
   return { ok: true };
 }
-export async function verifyTransaction(fd: FormData): Promise<void> {
-  const id = String(fd.get("id")); if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/realisasi?tab=daftar");
-  const { data, error } = await (await createClient()).from("transactions").update({ verification_status: "verified" }).eq("id", id).select("id");
-  if (error || !data?.length) redirect("/realisasi?tab=daftar&error=verify");
-  revalidatePath("/realisasi");
-}
 /**
- * Melengkapi/memperbarui No SPM/SP2D (dan Tanggal SPM/SP2D) satu transaksi langsung di aplikasi.
- * Tahapan mengikuti Tanggal SPM/SP2D (Murni < 16 Mar; Pergeseran 16 Mar - 26 Okt; Perubahan 27 Okt - 31 Des, dapat diatur admin):
- * bila tanggal baru jatuh pada tahapan lain, transaksi yang BELUM terverifikasi otomatis dipindah ke rekening/RUP padanannya di tahapan itu.
- * Kode RUP juga boleh dilengkapi menyusul lewat fungsi ini. Terverifikasi: nomor/tanggal/RUP hanya dapat dilengkapi bila masih kosong dan tidak boleh memindahkan tahapan.
+ * Mengubah satu transaksi langsung di aplikasi: tanggal transaksi, nilai, catatan, Tanggal & No SPM/SP2D, dan Kode RUP (semua boleh menyusul).
+ * Tidak ada verifikasi: perubahan langsung berlaku. Tahapan mengikuti tanggal SPM/SP2D (atau tanggal transaksi bila belum ada):
+ * Murni < 16 Mar; Pergeseran 16 Mar - 26 Okt; Perubahan 27 Okt - 31 Des (dapat diatur admin). Bila tanggal pindah tahapan, transaksi
+ * otomatis dipindah ke rekening/RUP padanannya di tahapan itu. Batas pagu/kas ditegakkan trigger database.
  */
-export async function updatePaymentInfo(fd: FormData): Promise<void> {
+export async function updateTransaction(fd: FormData): Promise<void> {
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect("/realisasi?tab=daftar&error=payment");
-  const p = paymentUpdateSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) redirect("/realisasi?tab=daftar&error=payment");
-  const sb = await createClient(), { id, payment_number, payment_date, rup_code } = p.data;
-  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, transaction_date, payment_date, payment_number, verification_status").eq("id", id).maybeSingle();
+  const p = transactionEditSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) redirect("/realisasi?tab=daftar&error=payment");
+  const sb = await createClient(), { id, payment_number, payment_date, rup_code, transaction_date, amount, notes } = p.data;
+  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, transaction_date, payment_date, payment_number").eq("id", id).maybeSingle();
   if (!row) redirect("/realisasi?tab=daftar&error=payment");
-  const patch: Record<string, unknown> = {}; if (payment_number !== null) patch.payment_number = payment_number; if (payment_date !== null) patch.payment_date = payment_date;
+  const patch: Record<string, unknown> = {};
+  if (payment_number !== null) patch.payment_number = payment_number; if (payment_date !== null) patch.payment_date = payment_date;
+  if (transaction_date !== null) patch.transaction_date = transaction_date; if (amount !== null) patch.amount = amount; if (notes !== undefined) patch.notes = notes || null;
   const ctx = await getBudgetContext(); let targetVid: string = row.budget_version_id as string;
-  if (payment_date && payment_date !== row.payment_date && ctx) {
-    if (Number(payment_date.slice(0, 4)) !== ctx.year) redirect("/realisasi?tab=daftar&error=year");
-    const ref = referenceDate({ transactionDate: row.transaction_date, paymentDate: payment_date }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
+  const newTx = (transaction_date ?? row.transaction_date) as string, newPay = (payment_date ?? row.payment_date) as string | null;
+  if (ctx && (payment_date !== null || transaction_date !== null)) {
+    if (Number(newTx.slice(0, 4)) !== ctx.year || (newPay && Number(newPay.slice(0, 4)) !== ctx.year)) redirect("/realisasi?tab=daftar&error=year");
+    const ref = referenceDate({ transactionDate: newTx, paymentDate: newPay }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
     if (!ver) redirect("/realisasi?tab=daftar&error=stage");
     if (ver.id !== row.budget_version_id) {
-      if (row.verification_status === "verified") redirect("/realisasi?tab=daftar&error=stage");      // terverifikasi: tahapan terkunci
       // Pindah tahapan: cari rekening padanan (subkegiatan + rekening + sumber dana + uraian) dan RUP berkode sama pada tahapan tujuan.
       const { data: cur } = await sb.from("budget_entries").select("subactivity_id, account_id, funding_source_id, description").eq("id", row.budget_entry_id).maybeSingle();
       if (!cur) redirect("/realisasi?tab=daftar&error=move");
@@ -75,14 +71,22 @@ export async function updatePaymentInfo(fd: FormData): Promise<void> {
       }
     }
   }
-  // Kode RUP boleh menyusul: dilengkapi di sini (harus ada pada arsip RUP tahapan tujuan). Terverifikasi: hanya bila masih kosong.
+  // Kode RUP boleh menyusul/diubah: harus ada pada arsip RUP tahapan transaksi.
   if (rup_code) {
     const code = rup_code.replace(/\.0+$/, "");
-    if (row.verification_status === "verified" && row.rup_package_id) redirect("/realisasi?tab=daftar&error=payment");
     const { data: rp } = await sb.from("rup_packages").select("id, planned_method_id").eq("budget_version_id", targetVid).eq("rup_code", code).maybeSingle();
     if (!rp) redirect("/realisasi?tab=daftar&error=rup");
-    patch.rup_package_id = rp.id; if (!row.procurement_method_id && rp.planned_method_id) patch.procurement_method_id = rp.planned_method_id;   // metode kosong: ikut metode rencana RUP
+    patch.rup_package_id = rp.id; if (!row.procurement_method_id && rp.planned_method_id) patch.procurement_method_id = rp.planned_method_id;
   }
-  if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect(`/realisasi?tab=daftar&error=${error.code === "P0001" ? "limit" : "payment"}`); }
+  if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect(`/realisasi?tab=daftar&error=${error.code === "P0001" ? "limit" : "payment"}&msg=${encodeURIComponent(error.code === "P0001" ? error.message.slice(0, 200) : "")}`); }
+  revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
+}
+
+/** Menghapus satu transaksi (jejak tetap ada di Log audit). Dapat dilakukan Super Admin, Admin OPD, dan PPBJ. */
+export async function deleteTransaction(fd: FormData): Promise<void> {
+  const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect("/realisasi?tab=daftar&error=payment");
+  const id = String(fd.get("id") ?? ""); if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/realisasi?tab=daftar");
+  const { data, error } = await (await createClient()).from("transactions").delete().eq("id", id).select("id");
+  if (error || !data?.length) redirect("/realisasi?tab=daftar&error=delete");
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
 }

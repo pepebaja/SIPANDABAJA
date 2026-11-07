@@ -14,12 +14,12 @@ import { StageDatesForm } from "@/components/stage-dates-form";
 import { rp } from "@/lib/format";
 import { fmtDate, fmtDateTime } from "@/lib/date";
 import { parseRupiah } from "@/lib/import/parse";
-import { updatePaymentInfo, verifyTransaction } from "./actions";
-import { deleteTxImportJob, verifyTxImportJob } from "./unggah-actions";
+import { updateTransaction, deleteTransaction } from "./actions";
+import { deleteTxImportJob } from "./unggah-actions";
 
 export const maxDuration = 60; // unggahan besar (pratinjau + penerapan) membutuhkan beberapa detik
 const PAGE = 25;
-type SP = { tab?: string; status?: string; pay?: string; proses?: string; page?: string; error?: string };
+type SP = { tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string };
 const pill = (on: boolean) => `rounded-full border px-4 py-1.5 text-sm font-semibold transition ${on ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`;
 const Skeleton = ({ h = "h-40" }: { h?: string }) => <div className={`card ${h} animate-pulse bg-slate-100`} role="status" aria-label="Memuat" />;
 
@@ -36,64 +36,68 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
   return <div className="space-y-5"><RealisasiUpload /><StageDatesForm year={year} versions={versions} canEdit={canSetStage} /></div>;
 }
 
-// ---------- tab: daftar transaksi ----------
-const LEGACY = "id, transaction_date, amount, verification_status, budget_entries(description, subactivities(code), expenditure_accounts(code)), rup_packages(rup_code)";
-const FULL = `${LEGACY}, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name)`;
+// ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
+const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), budget_entries(description, subactivities(code), expenditure_accounts(code)), rup_packages(rup_code)";
 const label = (r: any) => r.budget_entries ? `${r.budget_entries.subactivities?.code ?? ""} / ${r.budget_entries.expenditure_accounts?.code ?? ""}: ${r.budget_entries.description}` : "-";
-async function DaftarTab({ sb, vid, sp, canWrite }: { sb: SupabaseClient; vid: string; sp: SP; canWrite: boolean }) {
-  const status = sp.status === "verified" || sp.status === "unverified" ? sp.status : "", pay = sp.pay === "sudah" || sp.pay === "belum" ? sp.pay : "", proses = sp.proses === "pengadaan" || sp.proses === "non" ? sp.proses : "";
+const ERRORS: Record<string, string> = {
+  payment: "Perubahan ditolak. Periksa isian (tanggal, nilai, nomor) dan hak akses Anda.",
+  year: "Tanggal harus berada pada tahun anggaran yang dipilih.",
+  move: "Tanggal itu memindahkan transaksi ke tahapan lain, tetapi rekening (subkegiatan + rekening + sumber dana) atau kode RUP padanannya tidak ditemukan/tidak unik pada tahapan tujuan. Tambahkan/impor rekening itu pada tahapan tujuan (menu Kelola anggaran) lebih dulu.",
+  rup: "Kode RUP tidak ditemukan pada tahapan transaksi ini. Sinkronkan RUP tahapan tersebut (menu Paket RUP), atau kosongkan.",
+  limit: "Perubahan ditolak karena melampaui batas pagu/anggaran kas.",
+  stage: "Tidak ada tahapan anggaran yang berlaku pada tanggal itu. Periksa panel Aturan tahapan anggaran.",
+  delete: "Transaksi tidak dapat dihapus. Anda mungkin tidak berwenang." };
+async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient; vid: string; yearId: string; sp: SP; canWrite: boolean }) {
+  const pay = sp.pay === "sudah" || sp.pay === "belum" ? sp.pay : "", proses = sp.proses === "pengadaan" || sp.proses === "non" ? sp.proses : "";
   const page = Math.max(1, Number(sp.page) || 1);
-  const build = (cols: string, filters: boolean) => {
-    let q = sb.from("transactions").select(cols, { count: "exact" }).eq("budget_version_id", vid).order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
-    if (status) q = q.eq("verification_status", status);
-    if (filters && pay) q = q.eq("payment_status", pay);
-    if (filters && proses === "pengadaan") q = q.or("rup_package_id.not.is.null,procurement_method_id.not.is.null");
-    if (filters && proses === "non") q = q.is("rup_package_id", null).is("procurement_method_id", null);
-    return q;
-  };
-  let tx: any = await build(FULL, true), legacy = false;
-  if (tx.error) { tx = await build(LEGACY, false); legacy = true; }       // migrasi 20260113 belum dijalankan: tetap tampil
-  const rows: any[] = tx.data ?? [], pages = Math.max(1, Math.ceil((tx.count ?? 0) / PAGE));
+  const versions = await loadStageVersions(sb, yearId), cur = versions.find((v) => v.id === vid);
+  const ids = versions.filter((v) => v.id === vid || (cur && v.sortOrder < cur.sortOrder)).map((v) => v.id), stageOf = new Map(versions.map((v) => [v.id, v.stageName]));
+  let q = sb.from("transactions").select(SEL, { count: "exact" }).in("budget_version_id", ids.length ? ids : [vid]).order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
+  if (pay) q = q.eq("payment_status", pay);
+  if (proses === "pengadaan") q = q.or("rup_package_id.not.is.null,procurement_method_id.not.is.null");
+  if (proses === "non") q = q.is("rup_package_id", null).is("procurement_method_id", null);
+  const tx: any = await q, rows: any[] = tx.data ?? [], pages = Math.max(1, Math.ceil((tx.count ?? 0) / PAGE));
   const qs = (o: Record<string, string>) => new URLSearchParams({ tab: "daftar", ...Object.fromEntries(Object.entries(o).filter(([, v]) => v)) });
-  const href = (o: Partial<SP>) => `/realisasi?${qs({ status, pay, proses, ...o, page: "1" } as Record<string, string>)}`;
-  const pageHref = (p: number) => `/realisasi?${qs({ status, pay, proses, page: String(p) })}`;
-  const group = (title: string, key: "status" | "pay" | "proses", cur: string, opts: [string, string][]) => (
+  const href = (o: Partial<SP>) => `/realisasi?${qs({ pay, proses, ...o, page: "1" } as Record<string, string>)}`;
+  const pageHref = (p: number) => `/realisasi?${qs({ pay, proses, page: String(p) })}`;
+  const group = (title: string, key: "pay" | "proses", cur2: string, opts: [string, string][]) => (
     <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</span>
-      {opts.map(([v, l]) => <Link key={v} href={href({ [key]: v })} className={pill(v === cur)} aria-current={v === cur ? "true" : undefined}>{l}</Link>)}</div>);
+      {opts.map(([v, l]) => <Link key={v} href={href({ [key]: v })} className={pill(v === cur2)} aria-current={v === cur2 ? "true" : undefined}>{l}</Link>)}</div>);
   return (
     <div className="space-y-3">
-      {sp.error === "payment" && <p role="alert" className="alert alert-error">Perubahan SPM/SP2D ditolak. Transaksi terverifikasi hanya dapat dilengkapi bagian yang masih kosong.</p>}
-      {sp.error === "year" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D harus berada pada tahun anggaran yang dipilih.</p>}
-      {sp.error === "move" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D itu memindahkan transaksi ke tahapan lain, tetapi rekening (subkegiatan + rekening + sumber dana) atau kode RUP padanannya tidak ditemukan/ tidak unik pada tahapan tujuan. Impor anggaran/RUP tahapan tersebut lebih dulu.</p>}
-      {sp.error === "rup" && <p role="alert" className="alert alert-error">Kode RUP tidak ditemukan pada tahapan transaksi ini. Sinkronkan RUP tahapan tersebut (menu Paket RUP), atau kosongkan.</p>}
-      {sp.error === "limit" && <p role="alert" className="alert alert-error">Perubahan ditolak karena melampaui batas pagu/anggaran kas pada tahapan tujuan.</p>}
-      {sp.error === "stage" && <p role="alert" className="alert alert-error">Tanggal SPM/SP2D itu tidak berlaku pada tahapan yang tersedia, atau memindahkan transaksi terverifikasi ke tahapan lain (tahapan transaksi terverifikasi terkunci).</p>}
+      {sp.error && <p role="alert" className="alert alert-error">{ERRORS[sp.error] ?? ERRORS.payment}{sp.msg ? ` ${sp.msg}` : ""}</p>}
+      <p className="text-xs text-slate-600">Daftar ini <b>kumulatif</b>: memuat transaksi tahapan <b>{cur?.stageName}</b> beserta tahapan sebelumnya pada tahun yang sama. Tahapan transaksi ditentukan tanggal SPM/SP2D (Murni &lt; 16 Mar; Pergeseran 16 Mar-26 Okt; Perubahan 27 Okt-31 Des).</p>
       <div className="space-y-2" role="group" aria-label="Filter">
-        {group("Verifikasi", "status", status, [["", "Semua"], ["unverified", "Belum diverifikasi"], ["verified", "Terverifikasi"]])}
-        {!legacy && group("SPM/SP2D", "pay", pay, [["", "Semua"], ["sudah", "Sudah ada"], ["belum", "Belum ada"]])}
-        {!legacy && group("Proses", "proses", proses, [["", "Semua"], ["pengadaan", "Pengadaan"], ["non", "Non-pengadaan"]])}
+        {group("SPM/SP2D", "pay", pay, [["", "Semua"], ["sudah", "Sudah ada"], ["belum", "Belum ada"]])}
+        {group("Proses", "proses", proses, [["", "Semua"], ["pengadaan", "Pengadaan"], ["non", "Non-pengadaan"]])}
       </div>
-      {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !rows.length ? <p className="text-slate-600">Belum ada transaksi{status || pay || proses ? " dengan filter ini" : ""}.</p> : (
-        <div className="table-wrap"><table><thead><tr><th>Tgl transaksi</th>{!legacy && <th>Tanggal / No SPM-SP2D</th>}<th>Rekening</th><th>RUP / metode</th><th className="text-right">Nilai</th><th>Status</th></tr></thead>
-          <tbody>{rows.map((r) => { const locked = r.verification_status === "verified" && r.payment_date && r.payment_number && r.rup_packages?.rup_code; return (
+      {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !rows.length ? <p className="text-slate-600">Belum ada transaksi{pay || proses ? " dengan filter ini" : ""}.</p> : (
+        <div className="table-wrap"><table><thead><tr><th>Tgl transaksi</th><th>Tahapan</th><th>Tanggal / No SPM-SP2D</th><th>Rekening</th><th>RUP / metode</th><th className="text-right">Nilai</th>{canWrite && <th>Aksi</th>}</tr></thead>
+          <tbody>{rows.map((r) => (
             <tr key={r.id}><td className="whitespace-nowrap">{fmtDate(r.transaction_date)}</td>
-              {!legacy && <td className="min-w-44 text-sm">
-                {r.payment_date || r.payment_number ? <>{r.payment_date ? fmtDate(r.payment_date) : <span className="text-slate-500">tanggal belum diisi</span>}<span className="block text-xs text-slate-600">{r.payment_number ?? "nomor belum diisi"}</span></> : <span className="text-slate-500">belum ada SPM/SP2D</span>}
-                {canWrite && !locked && <details className="mt-1"><summary className="link cursor-pointer text-xs">{r.payment_date && r.payment_number ? "Ubah No/Tgl SPM-SP2D" : "Isi No SPM/SP2D / RUP"}</summary>
-                  <form action={updatePaymentInfo} className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2"><input type="hidden" name="id" value={r.id} />
-                    {(!r.payment_date || r.verification_status !== "verified") && <label className="block text-xs">Tanggal SPM/SP2D<input type="date" name="payment_date" defaultValue={r.payment_date ?? ""} className="mt-0.5 w-full py-1" /></label>}
-                    {(!r.payment_number || r.verification_status !== "verified") && <label className="block text-xs">No SPM/SP2D (isi manual)<input name="payment_number" defaultValue={r.payment_number ?? ""} maxLength={100} className="mt-0.5 w-full py-1" /></label>}
-                    <p className="text-[11px] text-slate-500">Tahapan mengikuti Tanggal SPM/SP2D (Murni &lt; 16 Mar; Pergeseran 16 Mar-26 Okt; Perubahan 27 Okt-31 Des). Bila tanggal pindah tahapan, transaksi belum terverifikasi dipindah otomatis.</p>{(!r.rup_packages?.rup_code || r.verification_status !== "verified") && <label className="block text-xs">Kode RUP (boleh menyusul)<input name="rup_code" defaultValue={r.rup_packages?.rup_code ?? ""} maxLength={50} inputMode="numeric" className="mt-0.5 w-full py-1" /></label>}<button className="btn btn-ghost btn-sm">Simpan</button></form></details>}</td>}
+              <td className="text-sm"><span className="badge badge-off">{stageOf.get(r.budget_version_id) ?? "-"}</span></td>
+              <td className="min-w-40 text-sm">{r.payment_date || r.payment_number ? <>{r.payment_date ? fmtDate(r.payment_date) : <span className="text-slate-500">tanggal belum diisi</span>}<span className="block text-xs text-slate-600">{r.payment_number ?? "nomor belum diisi"}</span></> : <span className="text-slate-500">belum ada SPM/SP2D</span>}</td>
               <td className="min-w-48 text-sm">{label(r)}</td>
               <td className="text-sm">{r.rup_packages?.rup_code ? <>RUP {r.rup_packages.rup_code}</> : <span className="text-slate-500">{r.procurement_methods?.name ? "Tanpa RUP" : "Non-pengadaan"}</span>}{r.procurement_methods?.name && <span className="block text-xs text-slate-600">{r.procurement_methods.name}</span>}</td>
               <td className={`text-right tabular-nums ${Number(r.amount) < 0 ? "text-amber-800" : ""}`}>{rp(r.amount)}{Number(r.amount) < 0 && <span className="block text-xs">koreksi</span>}</td>
-              <td>{r.verification_status === "verified" ? <span className="badge badge-ok">Terverifikasi</span> : <form action={verifyTransaction} className="flex items-center gap-2"><span className="badge badge-warn">Belum</span><input type="hidden" name="id" value={r.id} /><button className="link">Verifikasi</button></form>}</td></tr>); })}</tbody></table></div>)}
+              {canWrite && <td className="min-w-44 text-sm">
+                <details><summary className="link cursor-pointer text-xs">Ubah</summary>
+                  <form action={updateTransaction} className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2"><input type="hidden" name="id" value={r.id} />
+                    <label className="block text-xs">Tanggal transaksi<input type="date" name="transaction_date" defaultValue={r.transaction_date} className="mt-0.5 w-full py-1" /></label>
+                    <label className="block text-xs">Nilai (minus = koreksi)<input name="amount" defaultValue={r.amount} inputMode="decimal" className="mt-0.5 w-full py-1" /></label>
+                    <label className="block text-xs">Tanggal SPM/SP2D<input type="date" name="payment_date" defaultValue={r.payment_date ?? ""} className="mt-0.5 w-full py-1" /></label>
+                    <label className="block text-xs">No SPM/SP2D (isi manual)<input name="payment_number" defaultValue={r.payment_number ?? ""} maxLength={100} className="mt-0.5 w-full py-1" /></label>
+                    <label className="block text-xs">Kode RUP (boleh menyusul)<input name="rup_code" defaultValue={r.rup_packages?.rup_code ?? ""} maxLength={50} inputMode="numeric" className="mt-0.5 w-full py-1" /></label>
+                    <label className="block text-xs">Catatan<input name="notes" defaultValue={r.notes ?? ""} maxLength={500} className="mt-0.5 w-full py-1" /></label>
+                    <p className="text-[11px] text-slate-500">Perubahan langsung berlaku. Bila tanggal SPM/SP2D pindah tahapan, transaksi dipindah otomatis.</p>
+                    <button className="btn btn-ghost btn-sm">Simpan</button></form></details>
+                <form action={deleteTransaction} className="mt-1"><input type="hidden" name="id" value={r.id} /><button className="link text-xs text-red-700">Hapus</button></form></td>}</tr>))}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="link" href={pageHref(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages}</span>{page < pages && <Link className="link" href={pageHref(page + 1)}>Berikutnya</Link>}</nav>
     </div>);
 }
 
 // ---------- tab: riwayat unggahan ----------
-async function RiwayatTab({ sb, canVerify }: { sb: SupabaseClient; canVerify: boolean }) {
+async function RiwayatTab({ sb }: { sb: SupabaseClient }) {
   const { data: jobs } = await sb.from("import_jobs").select("id, file_name, status, total_rows, ok_rows, error_rows, created_by, created_at").eq("kind", "transactions").order("created_at", { ascending: false }).limit(30);
   const list = jobs ?? [], ids = list.map((j) => j.id), uids = [...new Set(list.map((j) => j.created_by).filter(Boolean))] as string[];
   const [stats, people] = await Promise.all([
@@ -103,38 +107,36 @@ async function RiwayatTab({ sb, canVerify }: { sb: SupabaseClient; canVerify: bo
   if (!list.length) return <p className="text-slate-600">Belum ada unggahan realisasi.</p>;
   return (
     <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>File</th><th>Diunggah oleh</th><th>Baris</th><th>Status</th><th className="text-right">Tercatat</th><th>Tindakan</th></tr></thead>
-      <tbody>{list.map((j) => { const s: any = st.get(j.id), n = Number(s?.tx_count ?? 0), un = Number(s?.unverified_count ?? 0); return (
+      <tbody>{list.map((j) => { const s: any = st.get(j.id), n = Number(s?.tx_count ?? 0); return (
         <tr key={j.id}><td className="whitespace-nowrap text-sm">{fmtDateTime(j.created_at)}</td><td className="text-sm">{j.file_name}</td><td className="text-sm">{who.get(j.created_by) ?? "-"}</td>
           <td className="text-sm">{j.ok_rows} valid{j.error_rows ? `, ${j.error_rows} bermasalah` : ""} dari {j.total_rows}</td>
           <td>{j.status === "confirmed" ? <span className="badge badge-ok">Diterapkan</span> : <span className="badge badge-off">Belum diterapkan</span>}</td>
           <td className="text-right text-sm tabular-nums">{j.status === "confirmed" ? <>{n} transaksi<br /><span className="text-xs text-slate-500">{rp(parseRupiah(s?.total) ?? "0.00")}</span></> : "-"}</td>
-          <td className="text-sm">{j.status !== "confirmed"
-            ? <form action={deleteTxImportJob}><input type="hidden" name="jobId" value={j.id} /><button className="link">Hapus</button></form>
-            : un > 0 ? (canVerify ? <form action={verifyTxImportJob}><input type="hidden" name="jobId" value={j.id} /><button className="link">Verifikasi {un} transaksi</button></form> : <span className="text-slate-600">{un} menunggu verifikasi admin</span>)
-            : n > 0 ? <span className="text-emerald-700">Semua terverifikasi</span> : "-"}</td></tr>); })}</tbody></table></div>);
+          <td className="text-sm">{j.status !== "confirmed" ? <form action={deleteTxImportJob}><input type="hidden" name="jobId" value={j.id} /><button className="link">Hapus</button></form> : "-"}</td></tr>); })}</tbody></table></div>);
 }
 
 export default async function RealisasiPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams, ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p>Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
   const sb = await createClient(), vid = ctx.versionId;
-  const [{ totals: t, overPaguCount }, session] = await Promise.all([loadRealizationTotals(sb, vid), getSession()]);
+  const [{ totals: t, overPaguCount }, session, un] = await Promise.all([loadRealizationTotals(sb, vid), getSession(), sb.rpc("realization_unmapped", { p_version: vid })]);
+  const unmapped = (Array.isArray(un.data) ? un.data[0] : un.data) as { tx_count: number; amount: string } | null;
   const canWrite = !!session && can(session.roles, "realization:write"), canAdmin = !!session && can(session.roles, "budget-setup:write");
   const tabs: [string, string][] = canWrite ? [["unggah", "Unggah Excel/CSV"], ["manual", "Input manual"], ["daftar", "Daftar transaksi"], ["riwayat", "Riwayat unggahan"]] : [["daftar", "Daftar transaksi"]];
   const tab = tabs.some(([k]) => k === sp.tab) ? sp.tab! : tabs[0]![0];
-  const cards: [string, string][] = [["Total pagu rekening", rp(t.pagu)], ["Realisasi terverifikasi", rp(t.verified)], ["Belum diverifikasi", rp(t.unverified)], ["Sisa pagu", rp(t.remaining)], ["Persentase realisasi", t.percent === null ? "N/A" : `${t.percent.replace(".", ",")}%`]];
+  const cards: [string, string][] = [["Total pagu rekening", rp(t.pagu)], ["Realisasi kumulatif", rp(t.verified)], ["Sisa pagu", rp(t.remaining)], ["Persentase realisasi", t.percent === null ? "N/A" : `${t.percent.replace(".", ",")}%`]];
   return (
     <section className="max-w-6xl space-y-5">
       <div><h1 className="page-title">Input Realisasi <span className="page-sub">Tahun {ctx.year}, {ctx.stageName}</span></h1>
-        <p className="text-sm text-slate-600">Catat realisasi paling cepat dengan <b>unggah Excel/CSV</b>: sistem menentukan tahapan anggaran dari tanggal SPM/SP2D (atau tanggal transaksi) dan menautkan kode RUP. Angka di bawah untuk tahapan yang dipilih di bagian atas layar; persentase dihitung dari transaksi terverifikasi.
+        <p className="text-sm text-slate-600">Realisasi bersifat <b>berkelanjutan</b>: angka tahapan <b>{ctx.stageName}</b> memuat realisasi tahapan sebelumnya (Murni &rarr; Pergeseran &rarr; Perubahan) terhadap pagu tahapan ini. Unggah Excel/CSV menentukan tahapan dari tanggal SPM/SP2D (atau tanggal transaksi). Transaksi dapat diubah dan dihapus kapan saja; tidak ada verifikasi.
           {" "}<Link className="link" href="/paket">Proses pengadaan &rarr;</Link></p></div>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">{cards.map(([k, v]) => <div key={k} className="card p-3"><p className="text-xs text-slate-600">{k}</p><p className="font-semibold tabular-nums">{v}</p></div>)}</div>
-      <p className="text-sm text-slate-600">{t.txCount} transaksi, {t.unverifiedCount} belum diverifikasi. {overPaguCount > 0 && <b className="text-amber-900">Ada {overPaguCount} rekening dengan total transaksi melampaui pagu.</b>}</p>
-      {sp.error && <p role="alert" className="alert alert-error">Verifikasi gagal. Hanya admin yang dapat memverifikasi, dan transaksi harus belum terverifikasi.</p>}
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">{cards.map(([k, v]) => <div key={k} className="card p-3"><p className="text-xs text-slate-600">{k}</p><p className="font-semibold tabular-nums">{v}</p></div>)}</div>
+      <p className="text-sm text-slate-600">{t.txCount} transaksi (kumulatif). {overPaguCount > 0 && <b className="text-amber-900">Ada {overPaguCount} rekening dengan realisasi melampaui pagu.</b>}</p>
+      {!!unmapped && Number(unmapped.tx_count) > 0 && <p role="alert" className="alert alert-warn text-sm">{unmapped.tx_count} transaksi tahapan sebelumnya ({rp(parseRupiah(unmapped.amount) ?? "0.00")}) belum terhitung di tahapan ini karena rekening/subkegiatannya tidak ada pada anggaran {ctx.stageName}. Tambahkan rekening padanannya di menu <Link className="link" href="/anggaran/kelola">Kelola anggaran</Link>.</p>}
       {tabs.length > 1 && <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-3" aria-label="Bagian Input Realisasi">{tabs.map(([k, l]) => <Link key={k} href={`/realisasi?tab=${k}`} className={pill(k === tab)} aria-current={k === tab ? "page" : undefined}>{l}</Link>)}</nav>}
       {tab === "unggah" && <Suspense fallback={<Skeleton h="h-72" />}><UnggahTab sb={sb} yearId={ctx.yearId} year={ctx.year} canSetStage={canAdmin} /></Suspense>}
       {tab === "manual" && <Suspense fallback={<Skeleton />}><ManualTab sb={sb} vid={vid} year={ctx.year} /></Suspense>}
-      {tab === "daftar" && <Suspense fallback={<Skeleton h="h-72" />}><DaftarTab sb={sb} vid={vid} sp={sp} canWrite={canWrite} /></Suspense>}
-      {tab === "riwayat" && <Suspense fallback={<Skeleton h="h-72" />}><RiwayatTab sb={sb} canVerify={canAdmin} /></Suspense>}
+      {tab === "daftar" && <Suspense fallback={<Skeleton h="h-72" />}><DaftarTab sb={sb} vid={vid} yearId={ctx.yearId} sp={sp} canWrite={canWrite} /></Suspense>}
+      {tab === "riwayat" && <Suspense fallback={<Skeleton h="h-72" />}><RiwayatTab sb={sb} /></Suspense>}
     </section>);
 }

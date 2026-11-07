@@ -26,7 +26,7 @@ export default async function Home() {
   const d = s as Summary;
   const pct = t.percent === null ? null : Math.min(100, Math.max(0, Number(t.percent)));
   const hero: [string, string, string][] = [
-    ["Total pagu anggaran", rp(t.pagu), "/realisasi"], ["Realisasi terverifikasi", rp(t.verified), "/realisasi?status=verified"], ["Sisa anggaran", rp(t.remaining), "/realisasi"]];
+    ["Total pagu anggaran", rp(t.pagu), "/realisasi"], ["Realisasi kumulatif", rp(t.verified), "/realisasi"], ["Sisa anggaran", rp(t.remaining), "/realisasi"]];
   const cards: [string, string, string][] = [
     ["Paket RUP", String(d.rup_count), "/rup"], ["Paket sudah diproses", String(d.pkg_processed), "/paket?kelompok=sudah_diproses"], ["Paket belum diproses", String(d.pkg_unprocessed), "/paket?kelompok=belum_diproses"],
     ["Nilai hasil pemilihan", rp(d.result_total), "/paket"], ["Nilai kontrak/SP", rp(d.contract_total), "/paket"], ["Perlu tindak lanjut", String(d.pkg_followup), "/paket?filter=tindak-lanjut"]];
@@ -34,7 +34,7 @@ export default async function Home() {
     <section className="max-w-7xl space-y-6">
       <div><p className="eyebrow">Ringkasan</p>
         <h1 className="page-title">Dashboard <span className="page-sub">Tahun {ctx.year} · {ctx.stageName}</span></h1>
-        <p className="page-desc">Diperbarui {nowWib()}. Sumber: data yang dicatat di aplikasi ini. Realisasi hanya dari transaksi terverifikasi{t.unverifiedCount > 0 ? `; ${t.unverifiedCount} transaksi belum diverifikasi (${rp(t.unverified)}) tidak ikut dihitung` : ""}.</p></div>
+        <p className="page-desc">Diperbarui {nowWib()}. Sumber: data yang dicatat di aplikasi ini. Realisasi bersifat kumulatif (tahapan terpilih + tahapan sebelumnya){t.unverifiedCount > 0 ? `; ${t.unverifiedCount} transaksi belum diverifikasi (${rp(t.unverified)}) tidak ikut dihitung` : ""}.</p></div>
       <QuickLinks />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {hero.map(([k, v, h], i) => <Link key={k} href={h} className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-800 to-navy-950 p-5 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-glow">
@@ -50,8 +50,8 @@ export default async function Home() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">{cards.map(([k, v, h]) => <Link key={k} href={h} className="card p-4 transition hover:-translate-y-0.5 hover:border-cyan-400">
         <p className="text-sm text-slate-600">{k}</p><p className="mt-1 break-words font-display text-xl font-bold tabular-nums text-navy-800">{v}</p></Link>)}</div>
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="card p-5"><h2 className="mb-3">Realisasi terverifikasi per bulan</h2>
-          {d.monthly.length ? <MonthlyChart data={fillMonths(d.monthly)} /> : <p className="text-slate-600">Belum ada transaksi terverifikasi pada tahun/tahapan ini.</p>}</div>
+        <div className="card p-5"><h2 className="mb-3">Realisasi per bulan</h2>
+          {d.monthly.length ? <MonthlyChart data={fillMonths(d.monthly)} /> : <p className="text-slate-600">Belum ada transaksi pada tahun/tahapan ini.</p>}</div>
         <div className="card p-5"><h2 className="mb-3">Paket per metode pemilihan</h2>
           {d.by_method.length ? <ul className="divide-y divide-slate-100">{d.by_method.map((x) => <li key={x.name} className="flex items-center justify-between py-2.5"><span>{x.name}</span><b className="badge badge-info tabular-nums">{x.count}</b></li>)}</ul> : <p className="text-slate-600">Belum ada paket pengadaan.</p>}</div>
       </div>

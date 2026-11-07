@@ -14,7 +14,7 @@ const TERMS: [string, string][] = [
   ["Kontrak/SP", "Kontrak, SPK, atau Surat Pesanan. Nilainya adalah komitmen, BUKAN realisasi keuangan."],
   ["Anggaran kas kumulatif", "Sisa kas triwulan sebelumnya dapat dipakai pada triwulan berikutnya; kas triwulan yang akan datang tidak dapat dipakai untuk belanja triwulan sebelumnya. Triwulan ditentukan dari tanggal transaksi."],
   ["Tanggal acuan tahapan", "Tahapan anggaran (Murni/Pergeseran/Perubahan) sebuah transaksi ditentukan oleh Tanggal SPM/SP2D bila sudah ada, atau tanggal transaksi bila belum. Tahapan yang berlaku = tahapan dengan tanggal mulai berlaku terakhir yang tidak melewati tanggal acuan."],
-  ["Realisasi", "Belanja yang benar-benar dicatat lewat transaksi dan sudah terverifikasi. Hanya transaksi terverifikasi yang dihitung."],
+  ["Realisasi", "Belanja yang dicatat lewat transaksi. Realisasi bersifat berkelanjutan: angka tahapan Pergeseran memuat realisasi Murni, dan angka Perubahan memuat realisasi Murni dan Pergeseran."],
 ];
 const FLOW: [string, string, string][] = [
   ["Pilih tahun dan tahapan", "Bagian atas layar", "Semua data mengikuti tahun anggaran dan tahapan (Murni/Pergeseran/Perubahan) yang dipilih."],
@@ -28,7 +28,6 @@ const FLOW: [string, string, string][] = [
   ["Melengkapi nomor SPM/SP2D", "Input Realisasi > Daftar transaksi, atau unggah ulang", "No SPM/SP2D tidak wajib saat pencatatan. Lengkapi lewat tombol Lengkapi/Ubah pada Daftar transaksi, atau unggah ulang baris yang sama (tanggal transaksi, rekening, kode RUP, dan nilai harus sama): transaksi diperbarui, tidak dicatat ganda. Setelah terverifikasi, bagian yang sudah terisi terkunci; yang masih kosong tetap dapat dilengkapi."],
   ["Koreksi realisasi", "Input Realisasi", "Isi nilai MINUS (-) untuk mengurangi realisasi (koreksi). Jenis transaksi dan dokumen tidak lagi diisi."],
   ["Metode pemilihan", "Input Realisasi", "Pilihan mengikuti Perpres 16/2018 jo. 12/2021 jo. 46/2025: E-purchasing, Pengadaan Langsung, Penunjukan Langsung, Tender Cepat, Tender, Seleksi (jasa konsultansi), dan Swakelola. Daftar dapat disesuaikan di menu Master data > Metode pemilihan."],
-  ["Verifikasi hasil unggahan", "Input Realisasi > Riwayat unggahan", "Transaksi hasil unggahan masuk sebagai belum diverifikasi. Admin memverifikasi sekaligus per unggahan; pengunggah (PPBJ) tidak dapat memverifikasi sendiri."],
   ["Catat realisasi", "Input Realisasi", "Pilih kode RUP (opsional) dan rekening dari arsip anggaran, isi tanggal dan nilai. Layar menampilkan program, kegiatan, sub kegiatan, sumber dana, PPTK, sisa pagu rekening, sisa pagu RUP, dan sisa anggaran kas kumulatif. Satu kode RUP boleh dicatat berulang. Pembayaran yang melebihi sisa pagu atau sisa kas kumulatif ditolak; kas triwulan berikutnya tidak dapat dipakai lebih awal. Admin kemudian memverifikasi; koreksi/pembatalan mengembalikan sisa."],
   ["Cetak laporan", "Laporan & dokumen", "Cetak atau unduh Excel: rekap anggaran dan realisasi, daftar paket, rencana kas, transaksi, dan lainnya."],
 ];
@@ -45,8 +44,8 @@ const FAQ: [string, string][] = [
   ["Lupa password.", "Hubungi administrator. Administrator dapat mengatur ulang password dari menu Pengguna, dan Anda wajib menggantinya saat masuk berikutnya."],
   ["Muncul pesan \"Username atau password salah\".", "Periksa huruf, tanpa spasi di awal/akhir. Setelah 5 kali gagal, akun terkunci sementara 15 menit. Akun nonaktif juga ditolak."],
   ["Impor anggaran ditolak.", "Biasanya kode subkegiatan, rekening, sumber dana, atau NIP PPTK belum ada di master data, atau pagu bukan angka. Perbaiki sesuai tabel masalah, lalu unggah ulang."],
-  ["Realisasi tidak sama dengan perkiraan.", "Periksa apakah masih ada transaksi belum diverifikasi. Hanya yang terverifikasi masuk perhitungan realisasi, sisa, dan persentase."],
-  ["Salah mencatat transaksi yang sudah terverifikasi.", "Jangan diubah. Buat transaksi Koreksi atau Pembatalan agar jejak keuangan tetap utuh."],
+  ["Realisasi tidak sama dengan perkiraan.", "Realisasi dihitung kumulatif dari tahapan sebelumnya. Periksa transaksi di Daftar transaksi dan peringatan transaksi tahapan sebelumnya yang belum terhitung bila rekeningnya tidak ada di tahapan ini."],
+  ["Salah mencatat transaksi yang sudah terverifikasi.", "Ubah atau hapus langsung di Input Realisasi > Daftar transaksi; setiap perubahan tercatat di Log audit."],
   ["Bagaimana mengunggah Anggaran Kas?", "Menu Anggaran kas > Unggah file. Paling akurat memakai template Excel (tombol Unduh template; berisi semua rekening anggaran, isi kolom tw1-tw4). PDF berbasis teks juga dapat dibaca otomatis, tetapi hasilnya selalu perlu diperiksa di pratinjau; PDF hasil scan tidak dapat dibaca."],
   ["Baris unggahan realisasi ditolak.", "Baca kolom Masalah dan Saran pada hasil pemeriksaan. Penyebab umum: kode rekening belum ada pada anggaran tahapan yang berlaku di tanggal itu, kode RUP tidak ada pada tahapan itu, tanggal di luar tahun anggaran, metode pemilihan tidak dikenali, atau melebihi sisa pagu/kas. Perbaiki lalu unggah ulang; baris yang sudah tercatat otomatis dilewati."],
   ["Data tidak muncul.", "Pastikan tahun dan tahapan di bagian atas sudah benar, dan versi anggaran untuk periode itu sudah disiapkan."],
