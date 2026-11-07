@@ -13,3 +13,9 @@ export const transactionSchema = z.object({
   notes: optText(500, "Catatan maksimal 500 karakter"),
 }).transform((d) => ({ ...d, kind: d.amount.startsWith("-") ? "koreksi" : "pembayaran" }));
 export const paymentUpdateSchema = z.object({ id: z.string().uuid(), payment_number: optText(100, "No SPM/SP2D maksimal 100 karakter"), payment_date: optDate, rup_code: optText(50, "Kode RUP maksimal 50 karakter") });
+/** Ubah transaksi yang sudah tercatat. Kolom kosong = tidak diubah (kecuali catatan: kosong = hapus catatan bila kolomnya dikirim). */
+export const transactionEditSchema = z.object({
+  id: z.string().uuid(), transaction_date: optDate, payment_date: optDate, payment_number: optText(100, "No SPM/SP2D maksimal 100 karakter"), rup_code: optText(50, "Kode RUP maksimal 50 karakter"),
+  amount: z.string().optional().transform((v, ctx) => { if (!v || !v.trim()) return null; const p = parseRupiah(v); if (p === null || toCents(p) === 0n) { ctx.addIssue({ code: "custom", message: "Nilai harus angka rupiah dan tidak boleh nol (minus untuk koreksi)" }); return z.NEVER; } return p; }),
+  notes: z.string().trim().max(500, "Catatan maksimal 500 karakter").optional(),
+});
