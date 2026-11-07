@@ -6,6 +6,7 @@ import { REPORTS } from "@/lib/report-types";
 import { Icon } from "@/components/icons";
 export const metadata = { title: "Laporan & dokumen" };
 const DOCS: [string, string, string, string][] = [
+  ["/laporan/kinerja-pengadaan", "Laporan kinerja pejabat pengadaan", "Presentasi laporan (kerangka tata naskah dinas) yang interaktif: ringkasan, status paket, kinerja per pejabat, kendala, simpulan, dan penutup. Dapat dicetak/PDF.", "file"],
   ["/panduan", "Panduan pengguna", "Cara memakai setiap menu, alur kerja, dan hak akses per peran. Dapat dicetak.", "book"],
   ["/dokumen/formulir-akun", "Formulir permohonan akun", "Formulir kosong bermaterai kop OPD untuk meminta akun pengguna baru beserta pernyataan penggunaan.", "file"],
   ["/api/templates/budget", "Template impor anggaran (Excel)", "Berkas Excel dengan kolom yang dibutuhkan untuk mengimpor anggaran.", "download"],

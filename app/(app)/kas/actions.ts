@@ -8,7 +8,8 @@ import { extractPdfLines } from "@/lib/server/pdf-lines";
 import { readFirstSheet } from "@/lib/import/xlsx";
 import { sha256 } from "@/lib/import/hash";
 import { parseRupiah } from "@/lib/import/parse";
-import { buildEntryIndex, parseCashPdfLines, validateCashRows, type CashParse, type CashRowError, type PreviewRow, type Quarters } from "@/lib/cash-import";
+import { loadStageVersions } from "@/lib/server/stage-versions";
+import { buildEntryIndex, resolveEntry, parseCashPdfLines, validateCashRows, type CashParse, type CashRowError, type PreviewRow, type Quarters } from "@/lib/cash-import";
 import { can } from "@/lib/rbac";
 
 const DENIED = "Anda tidak berwenang mengubah anggaran kas.";
@@ -118,4 +119,45 @@ export async function confirmCashImport(_p: CashImportState, fd: FormData): Prom
   if (error) return { error: error.message.includes("function") ? "Migrasi database 20260107 belum dijalankan di Supabase." : error.message };
   revalidatePath("/kas");
   return { applied: data as number };
+}
+
+// ---------- salin dari tahapan sebelumnya (Murni -> Pergeseran -> Perubahan) ----------
+export type CopyState = { error?: string; ok?: boolean; from?: string; copied?: number; kept?: number; newEntries?: number; missing?: number; missingList?: string[] };
+/**
+ * Menyalin anggaran kas dari tahapan sebelumnya yang sudah punya kas ke tahapan aktif, lalu dapat disesuaikan di input manual/unggah Excel.
+ * Rekening dicocokkan lewat subkegiatan + rekening + sumber dana (+ uraian bila perlu). Rekening/subkegiatan BARU pada tahapan aktif
+ * tidak punya padanan, sehingga dibiarkan kosong untuk diisi. Nilai yang sudah terisi di tahapan aktif tidak ditimpa kecuali dipilih.
+ */
+export async function copyCashFromPrevious(_p: CopyState, fd: FormData): Promise<CopyState> {
+  const s = await getSession(); if (!s || !can(s.roles, "cash:write")) return { error: DENIED };
+  const ctx = await getBudgetContext(); if (!ctx?.versionId) return { error: "Versi anggaran untuk tahun/tahapan ini belum disiapkan." };
+  const overwrite = fd.get("overwrite") === "on", sb = await createClient();
+  const versions = await loadStageVersions(sb, ctx.yearId), cur = versions.find((v) => v.id === ctx.versionId);
+  if (!cur) return { error: "Versi anggaran aktif tidak ditemukan." };
+  const earlier = versions.filter((v) => v.sortOrder < cur.sortOrder || (v.sortOrder === cur.sortOrder && v.versionNo < cur.versionNo)).reverse();
+  if (!earlier.length) return { error: "Tahapan ini adalah tahapan pertama; tidak ada tahapan sebelumnya untuk disalin." };
+  let src: (typeof earlier)[number] | null = null, srcLoaded: Awaited<ReturnType<typeof loadCashEntries>> | null = null;
+  for (const v of earlier) { const l = await loadCashEntries(sb, v.id); if (l.entries.some((e) => e.q.some((x) => x !== null))) { src = v; srcLoaded = l; break; } }
+  if (!src || !srcLoaded) return { error: "Tahapan sebelumnya belum memiliki anggaran kas yang dapat disalin." };
+  const dst = await loadCashEntries(sb, ctx.versionId);
+  if (!dst.entries.length) return { error: "Belum ada rekening anggaran pada tahapan ini. Impor anggaran tahapan ini lebih dulu." };
+  const idx = buildEntryIndex(toEntryRefs(dst.entries)), byId = new Map(dst.entries.map((e) => [e.id, e])), covered = new Set<string>();
+  const put = new Map<string, Quarters>(), missingList: string[] = []; let kept = 0, missing = 0;
+  for (const e of srcLoaded.entries) {
+    if (!e.q.some((x) => x !== null)) continue;
+    const r = resolveEntry(idx, e.subCode, e.accCode, e.fund, e.desc);
+    if (!("entry" in r)) { missing++; if (missingList.length < 20) missingList.push(`${e.subCode} / ${e.accCode}: ${e.desc}`); continue; }
+    covered.add(r.entry.id);
+    const t = byId.get(r.entry.id)!;
+    if (!overwrite && t.q.some((x) => x !== null)) { kept++; continue; }
+    put.set(r.entry.id, e.q);
+  }
+  const planId = await ensurePlan(sb, ctx.versionId); if (!planId) return { error: DENIED };
+  const upserts = [...put].flatMap(([id, q]) => q.map((v, i) => (v === null ? null : { cash_plan_id: planId, budget_entry_id: id, period_quarter: i + 1, planned_amount: v })).filter((x) => x !== null));
+  for (let i = 0; i < upserts.length; i += 500) {
+    const { error } = await sb.from("cash_plan_items").upsert(upserts.slice(i, i + 500), { onConflict: "cash_plan_id,budget_entry_id,period_quarter" });
+    if (error) return { error: "Gagal menyalin. Anda mungkin tidak berwenang." };
+  }
+  revalidatePath("/kas");
+  return { ok: true, from: src.stageName, copied: put.size, kept, missing, missingList, newEntries: dst.entries.filter((e) => !covered.has(e.id) && !e.q.some((x) => x !== null)).length };
 }

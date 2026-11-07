@@ -6,6 +6,7 @@ import { loadCashEntries } from "@/lib/server/cash-data";
 import { fetchAll } from "@/lib/server/fetch-all";
 import { CashGrid } from "@/components/cash-grid";
 import { CashUpload } from "@/components/cash-upload";
+import { CashCopy } from "@/components/cash-copy";
 import { Icon } from "@/components/icons";
 import { cashWarnings, monthToQuarter, QUARTER_LABELS, quarterTotals, type CashItem } from "@/lib/cash";
 import { parseRupiah } from "@/lib/import/parse";
@@ -52,7 +53,7 @@ export default async function KasPage() {
         <div className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-indigo-50 p-4 shadow-card"><p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Kas / pagu</p><p className="mt-1 font-display text-lg font-bold tabular-nums text-navy-800">{pct === null ? "N/A" : `${pct.replace(".", ",")}%`}</p><p className="text-xs text-slate-600">Pagu {rp(totalPagu)}</p></div>
       </div>
       {!entries.length ? <p className="alert alert-info max-w-xl">Belum ada rekening anggaran. Impor anggaran lebih dulu di menu Impor anggaran.</p> : <>
-        {canEdit ? <CashUpload /> : <p className="alert alert-info max-w-3xl">Peran Anda hanya dapat melihat anggaran kas. Pengisian dilakukan Super Admin, Admin OPD, atau PPBJ.</p>}
+        {canEdit ? <><CashCopy stageName={ctx.stageName} /><CashUpload /></> : <p className="alert alert-info max-w-3xl">Peran Anda hanya dapat melihat anggaran kas. Pengisian dilakukan Super Admin, Admin OPD, atau PPBJ.</p>}
         <details className="card p-4" open={warnings.length > 0 && warnings.length <= 8}>
           <summary className="cursor-pointer font-display font-bold text-navy-800">Peringatan ({warnings.length})</summary>
           {warnings.length ? <ul className="mt-3 space-y-1.5 text-sm">{warnings.slice(0, 50).map((w, i) => <li key={i} className="alert alert-warn py-2"><b>{kind(w.type)}:</b> {w.type === "exceeds_pagu" ? `${label.get(w.refId) ?? ""}: ${w.message}` : w.message}</li>)}{warnings.length > 50 && <li className="text-xs text-slate-600">Menampilkan 50 peringatan pertama dari {warnings.length}.</li>}</ul>
