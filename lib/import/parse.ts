@@ -8,13 +8,14 @@
 export function parseRupiah(v: unknown): string | null {
   if (typeof v === "number") return Number.isFinite(v) ? v.toFixed(2) : null;
   if (typeof v !== "string") return null;
-  let s = v.replace(/^[\s'"`\u2018\u2019]+/, "")        // apostrof pembuka (sel teks)
+  const paren = /^\s*\(.*\)\s*$/.test(v);                    // format akuntansi: (1.500.000) = minus
+  let s = (paren ? v.replace(/[()]/g, "") : v).replace(/^[\s'"`\u2018\u2019]+/, "")        // apostrof pembuka (sel teks)
     .replace(/idr|rp\.?/gi, "")                          // "Rp", "Rp.", "IDR"
     .replace(/[\s\u00a0\u202f]/g, "")                    // spasi biasa / non-breaking
     .replace(/[,.]-+$/, "")                              // akhiran ",-" atau ".-"
     .replace(/[.,]+$/, "");                              // titik/koma tergantung di akhir
   if (!/^-?[\d.,]+$/.test(s)) return null;
-  const neg = s.startsWith("-"); if (neg) s = s.slice(1);
+  const neg = paren || s.startsWith("-"); if (s.startsWith("-")) s = s.slice(1);
   const lastDot = s.lastIndexOf("."), lastCom = s.lastIndexOf(",");
   const groups = (sep: string) => new RegExp(`^\\d{1,3}(\\${sep}\\d{3})+$`);
   let int: string, frac = "";

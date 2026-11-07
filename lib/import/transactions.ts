@@ -5,10 +5,12 @@ import type { MatrixRow } from "./xlsx";
 import { BASIS_LABEL, paymentStatusOf, referenceDate, resolveVersion, type Basis, type PaymentStatus, type StageVersion } from "../stage-rule";
 
 /** Kolom template (urutan tampil). Kolom lama (jenis transaksi/dokumen, nomor/tanggal dokumen, kode paket) sudah dihapus. */
-export const TX_TEMPLATE_COLUMNS = ["tanggal_transaksi", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "kode_rup", "metode_pemilihan", "tanggal_spm_sp2d", "no_spm_sp2d", "nilai", "catatan"] as const;
+export const TX_TEMPLATE_COLUMNS = ["tanggal_transaksi", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "kode_rup", "metode_pemilihan", "tanggal_spm_sp2d", "no_spm_sp2d", "nilai", "catatan", "uraian"] as const;
 export type TxField = "tanggal" | "sub" | "rek" | "dana" | "uraian" | "rup" | "metode" | "paytgl" | "payno" | "spmtgl" | "spmno" | "sp2dtgl" | "sp2dno" | "jenis" | "nilai" | "catatan";
 const alnum = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const str = (v: unknown) => String(v ?? "").trim();
+/** Kode (subkegiatan, rekening, sumber dana, RUP): buang spasi/spasi tak terlihat yang sering ikut tersalin dari Excel/PDF. */
+export const codeOf = (v: unknown) => String(v ?? "").replace(/[\s\u00a0\u200b-\u200d\u2060\ufeff]+/g, "");
 const ALIASES: Record<TxField, string[]> = {
   tanggal: ["tanggaltransaksi", "tgltransaksi", "tanggal", "tgl", "tanggalbukti", "tanggalrealisasi"],
   sub: ["kodesubkegiatan", "subkegiatan", "kodesubkeg", "kodesub"],
@@ -78,11 +80,11 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
   if (map.retired.length) warnings.push({ row: 0, message: `Kolom ${map.retired.join(", ")} sudah tidak dipakai dan diabaikan. Hubungkan pengadaan lewat kode_rup; nomor dokumen tidak lagi diperlukan.` });
   if (map.cols.jenis !== undefined) warnings.push({ row: 0, message: "Kolom jenis_transaksi sudah tidak dipakai: baris bertanda koreksi/pembatalan tetap dicatat sebagai nilai minus. Untuk seterusnya isi koreksi langsung dengan nilai minus." });
   const c = map.cols, at = (r: MatrixRow, f: TxField) => (c[f] === undefined ? undefined : r.cells[c[f]!]);
-  const entriesBy = new Map<string, TxEntry[]>(); for (const e of lk.entries) { const k = `${e.versionId}|${e.sub}|${e.acc}`; entriesBy.set(k, [...(entriesBy.get(k) ?? []), e]); }
+  const entriesBy = new Map<string, TxEntry[]>(); for (const e of lk.entries) { const k = `${e.versionId}|${codeOf(e.sub)}|${codeOf(e.acc)}`; entriesBy.set(k, [...(entriesBy.get(k) ?? []), e]); }
   for (const r of rows) {
     if (r.n <= map.headerRow) continue;
     const g = (f: TxField) => str(at(r, f));
-    if (!g("tanggal") && !g("sub") && !g("rek") && g("nilai") === "") { skipped++; continue; }              // baris kosong / pemisah
+    if (!g("tanggal") && !g("sub") && !g("rek")) { skipped++; if (g("nilai") !== "") warnings.push({ row: r.n, message: "Baris tanpa tanggal, subkegiatan, dan rekening dilewati (dianggap baris jumlah/total)" }); continue; }   // baris kosong / pemisah / total
     if (ALIASES.tanggal.includes(alnum(g("tanggal"))) || ALIASES.sub.includes(alnum(g("sub")))) { skipped++; continue; } // judul berulang
     const before = errors.length, err = (field: string, message: string, hint: string) => errors.push({ row: r.n, field, message, hint });
     const warn = (message: string) => warnings.push({ row: r.n, message });
@@ -91,7 +93,7 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     if (!tgl) err("tanggal_transaksi", g("tanggal") ? `Tanggal tidak dapat dibaca: "${g("tanggal")}"` : "Tanggal transaksi kosong", "Gunakan format 15/03/2026, 2026-03-15, atau 15 Maret 2026");
     else if (Number(tgl.slice(0, 4)) !== lk.year) err("tanggal_transaksi", `Tanggal ${tgl} bukan tahun anggaran ${lk.year}`, `Pilih tahun anggaran ${tgl.slice(0, 4)} di bagian atas, lalu unggah ulang baris ini`);
     else tanggal = tgl;
-    const sub = g("sub"), acc = g("rek");
+    const sub = codeOf(at(r, "sub")), acc = codeOf(at(r, "rek"));
     if (!sub) err("kode_subkegiatan", "Kosong", "Isi kode subkegiatan sesuai DPA"); if (!acc) err("kode_rekening", "Kosong", "Isi kode rekening");
 
     // Nilai minus = koreksi (mengurangi realisasi). Format lama: jenis koreksi/pembatalan dengan nilai positif tetap dijadikan minus.
@@ -118,15 +120,16 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     if (!ver) { err("tahapan", `Tidak ada tahapan anggaran yang berlaku pada ${ref.date} (${BASIS_LABEL[ref.basis].toLowerCase()})`, "Atur tanggal mulai berlaku tahapan di panel \"Aturan tahapan anggaran\" dan pastikan versi anggarannya sudah disiapkan"); continue; }
 
     const cands = entriesBy.get(`${ver.id}|${sub}|${acc}`) ?? []; let pick = cands;
-    const dana = g("dana").toUpperCase(), ur = norm(g("uraian"));
+    const dana = codeOf(at(r, "dana")).toUpperCase(), ur = norm(g("uraian")), rupIn = codeOf(g("rup")).replace(/\.0+$/, "") || null;
     if (pick.length > 1 && dana) pick = pick.filter((e) => e.fund.toUpperCase() === dana);
     if (pick.length > 1 && ur) { const exact = pick.filter((e) => norm(e.desc) === ur); pick = exact.length ? exact : pick.filter((e) => norm(e.desc).includes(ur)); }
+    if (pick.length > 1 && rupIn) { const byRup = pick.filter((e) => lk.allocRupByEntry?.get(e.id)?.includes(rupIn)); if (byRup.length) pick = byRup; }   // kode RUP yang dialokasikan ke satu rekening saja
     if (!pick.length) { err("kode_rekening", `Subkegiatan ${sub} + rekening ${acc} tidak ada pada anggaran ${ver.stageName} (berlaku ${ref.date})`,
-      cands.length ? "Sumber dana tidak cocok dengan rekening yang ada" : `Impor anggaran tahapan ${ver.stageName} lebih dulu, atau periksa tanggal SPM/SP2D dan kodenya`); continue; }
-    if (pick.length > 1) { err("kode_rekening", `Ada ${pick.length} rekening dengan subkegiatan + rekening yang sama pada ${ver.stageName}`, `Isi kode_sumber_dana. Pilihan: ${pick.slice(0, 3).map((e) => `${e.fund} / ${e.desc.slice(0, 40)}`).join("; ")}`); continue; }
+      cands.length ? "Sumber dana tidak cocok dengan rekening yang ada" : !lk.entries.some((e) => e.versionId === ver.id) ? `Anggaran tahapan ${ver.stageName} belum diimpor sama sekali. Impor anggaran tahapan ini lebih dulu (menu Impor anggaran)` : `Impor anggaran tahapan ${ver.stageName} lebih dulu, atau periksa tanggal SPM/SP2D dan kodenya`); continue; }
+    if (pick.length > 1) { err("kode_rekening", `Ada ${pick.length} rekening dengan subkegiatan + rekening yang sama pada ${ver.stageName}`, `Isi kolom kode_sumber_dana dan/atau uraian (persis seperti di anggaran). Pilihan: ${pick.slice(0, 3).map((e) => `${e.fund} / ${e.desc.slice(0, 40)}`).join("; ")}`); continue; }
     const entry = pick[0]!;
 
-    let rupId: string | null = null, rupCode = g("rup").replace(/\.0+$/, "") || null, rupMethod: string | null = null;
+    let rupId: string | null = null, rupCode = rupIn, rupMethod: string | null = null;
     if (rupCode) { const rp = lk.rupByVersion.get(ver.id)?.get(rupCode); if (!rp) { err("kode_rup", `Kode RUP ${rupCode} tidak ada pada ${ver.stageName}`, "Sinkronkan RUP tahapan tersebut (menu Paket RUP), atau kosongkan bila belanja non-pengadaan"); continue; } rupId = rp.id; rupMethod = rp.methodId; }
     if (!method && rupMethod) method = lk.methods.find((m) => m.id === rupMethod) ?? null;     // metode kosong: ikuti metode rencana pada RUP
     if (!rupId) { const al = lk.allocRupByEntry?.get(entry.id); if (al?.length) warn(`Rekening ini dialokasikan ke RUP ${al.slice(0, 3).join(", ")}${al.length > 3 ? ", ..." : ""}; baris tanpa kode RUP dicatat sebagai non-pengadaan`); }

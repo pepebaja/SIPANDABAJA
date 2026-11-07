@@ -10,7 +10,7 @@ describe("parseRupiah", () => {
   it.each([["Rp. 1.500.000", "1500000.00"], ["Rp.1.500.000,-", "1500000.00"], ["1.500.000,-", "1500000.00"], ["1,500,000.00", "1500000.00"], ["1,500,000", "1500000.00"],
     ["IDR 1,500,000.50", "1500000.50"], ["'1500000", "1500000.00"], ["1 500 000", "1500000.00"], ["\u00a01.500.000", "1500000.00"], ["1.500.000,5", "1500000.50"], ["1.500.000.", "1500000.00"], ["-0", "0.00"]])("format Excel/Indonesia %s", (i, o) => expect(parseRupiah(i)).toBe(o));
   it("angka negatif tetap terdeteksi", () => expect(parseRupiah("-1.500.000")).toBe("-1500000.00"));
-  it.each(["abc", "", "1,234,56", "10,005", "1,500", "-", "1.5E+06", "(1.500.000)", "12,5%"])("menolak %s", (i) => expect(parseRupiah(i)).toBeNull());
+  it.each(["abc", "", "1,234,56", "10,005", "1,500", "-", "1.5E+06", "12,5%"])("menolak %s", (i) => expect(parseRupiah(i)).toBeNull());
 });
 describe("validateBudgetRows", () => {
   const ok = { _row: 2, kode_subkegiatan: "1.01.01", kode_rekening: "5.1.02", kode_sumber_dana: "dau", uraian: "Belanja ATK", pagu: "1.000.000", nip_pptk: "1980" };
@@ -28,3 +28,5 @@ describe("xlsx", () => {
     expect(sha256(buf)).toBe(sha256(buf));
   });
 });
+import { parseRupiah as pr2 } from "@/lib/import/parse";
+describe("parseRupiah format akuntansi", () => { it("(1.500.000) = minus", () => expect(pr2("(1.500.000)")).toBe("-1500000.00")); });

@@ -23,8 +23,8 @@ const run = (rows: unknown[][], l = lk()) => { const m = mx(...rows), h = findTx
 const base = { kode_subkegiatan: "1.01.01", kode_rekening: "5.1.02", nilai: "1.000.000,00" };
 
 describe("template: kolom disederhanakan", () => {
-  it("10 kolom; kolom lama (jenis, dokumen, kode paket, SPM & SP2D terpisah) tidak ada", () => {
-    expect(head).toEqual(["tanggal_transaksi", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "kode_rup", "metode_pemilihan", "tanggal_spm_sp2d", "no_spm_sp2d", "nilai", "catatan"]);
+  it("11 kolom (uraian opsional di kanan); kolom lama (jenis, dokumen, kode paket, SPM & SP2D terpisah) tidak ada", () => {
+    expect(head).toEqual(["tanggal_transaksi", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "kode_rup", "metode_pemilihan", "tanggal_spm_sp2d", "no_spm_sp2d", "nilai", "catatan", "uraian"]);
     for (const k of ["jenis_transaksi", "jenis_dokumen", "nomor_dokumen", "tanggal_dokumen", "kode_paket", "no_spm", "no_sp2d"]) expect(head).not.toContain(k);
   });
 });
@@ -129,4 +129,31 @@ describe("alur berkas sungguhan", () => {
     const m = parseCsv(csv), h = findTxHeader(m); if ("error" in h) throw new Error(h.error);
     const r = parseTxRows(m, h.map, lk()); expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ amount: "1250000.75", stage_code: "MURNI" });
   });
+});
+
+describe("ketahanan unggahan Excel", () => {
+  const T = "2026-03-10";
+  it("spasi/spasi tak terlihat pada kode tidak menggagalkan pencocokan", () => {
+    const r = run([row({ ...base, tanggal_transaksi: T, kode_subkegiatan: " 1.01.01\u00a0", kode_rekening: "5.1.02\u200b ", kode_sumber_dana: " dau " })]);
+    expect(r.errors).toEqual([]); expect(r.valid).toHaveLength(1);
+  });
+  it("baris jumlah/total (tanpa tanggal, subkegiatan, rekening) dilewati, bukan error", () => {
+    const r = run([row({ ...base, tanggal_transaksi: T }), row({ nilai: 5000000 })]);
+    expect(r.errors).toEqual([]); expect(r.skipped).toBe(1); expect(r.warnings.some((w) => /total/i.test(w.message))).toBe(true);
+  });
+  it("beberapa rekening sama dibedakan lewat uraian", () => {
+    const l = lk({ entries: [entry("a1", "vm", "DAU", "Belanja ATK"), entry("a2", "vm", "DAU", "Belanja Kertas")] });
+    const r = run([row({ ...base, tanggal_transaksi: T, uraian: "Belanja Kertas" })], l);
+    expect(r.errors).toEqual([]); expect(r.valid[0]!.entry_id).toBe("a2");
+  });
+  it("beberapa rekening sama dibedakan lewat alokasi kode RUP", () => {
+    const l = lk({ entries: [entry("a1", "vm", "DAU", "Belanja ATK"), entry("a2", "vm", "DAU", "Belanja Kertas")], allocRupByEntry: new Map([["a2", ["111"]]]) });
+    const r = run([row({ ...base, tanggal_transaksi: T, kode_rup: "111" })], l);
+    expect(r.errors).toEqual([]); expect(r.valid[0]!.entry_id).toBe("a2");
+  });
+  it("tetap ambigu tanpa petunjuk: pesan menyarankan kolom uraian", () => {
+    const l = lk({ entries: [entry("a1", "vm", "DAU", "Belanja ATK"), entry("a2", "vm", "DAU", "Belanja Kertas")] });
+    expect(run([row({ ...base, tanggal_transaksi: T })], l).errors[0]!.hint).toMatch(/uraian/);
+  });
+  it("nilai format akuntansi (1.500.000) dibaca sebagai minus (koreksi)", () => expect(run([row({ ...base, tanggal_transaksi: T, nilai: "(1.500.000)" })]).valid[0]!.amount).toBe("-1500000.00"));
 });
