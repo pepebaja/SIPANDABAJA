@@ -106,6 +106,8 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     const dateParts = [parseDateCell(at(r, "paytgl")), parseDateCell(at(r, "sp2dtgl")), parseDateCell(at(r, "spmtgl"))];
     if (dateParts.some((d) => d === null)) err("tanggal_spm_sp2d", `Tanggal tidak dapat dibaca: "${g("paytgl") || g("sp2dtgl") || g("spmtgl")}"`, "Gunakan format 15/03/2026");
     const payDate = dateParts.find((d) => d) || null, payNo = (g("payno") || g("sp2dno") || g("spmno")) || null;
+    // Unggah Excel: realisasi hanya dicatat dan diakui bila Tanggal SPM/SP2D terisi (tahapan ditentukan olehnya). Tanpa tanggal: input manual.
+    if (!payDate && !dateParts.some((d) => d === null)) err("tanggal_spm_sp2d", "Kosong. Realisasi lewat unggah hanya diakui bila tanggal SPM/SP2D terisi", "Isi tanggal_spm_sp2d. Transaksi yang belum memiliki tanggal SPM/SP2D dicatat lewat tab Input manual");
     if (payDate && Number(payDate.slice(0, 4)) !== lk.year) err("tanggal_spm_sp2d", `Tanggal ${payDate} di luar tahun anggaran ${lk.year}`, "Realisasi dicatat pada tahun anggaran yang sama dengan tanggal SPM/SP2D");
     if (payNo && payNo.length > 100) err("no_spm_sp2d", "Nomor terlalu panjang (maks. 100 karakter)", "Periksa kolom nomor");
     if (g("catatan").length > 500) err("catatan", "Catatan lebih dari 500 karakter", "Persingkat catatan");
@@ -113,7 +115,6 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     if (g("metode")) { method = matchMethod(g("metode"), lk.methods); if (!method) err("metode_pemilihan", `Metode pemilihan tidak dikenali: "${g("metode")}"`, `Pilihan: ${lk.methods.map((m) => m.name).join(", ")}`); }
 
     if (errors.length > before) continue;
-    if (payNo && !payDate) warn("No SPM/SP2D diisi tanpa tanggal; tahapan mengikuti tanggal transaksi sampai tanggal SPM/SP2D dilengkapi");
     const ref = referenceDate({ transactionDate: tanggal, paymentDate: payDate });
     if (ref.basis === "spm_sp2d" && ref.date < tanggal) warn(`Tanggal SPM/SP2D (${ref.date}) lebih awal dari tanggal transaksi (${tanggal}); tahapan mengikuti tanggal SPM/SP2D`);
     const ver = resolveVersion(lk.versions, lk.year, ref.date);
