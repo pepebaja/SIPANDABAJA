@@ -18,7 +18,8 @@ const lk = (over: Partial<TxLookup> = {}): TxLookup => ({
   allocRupByEntry: new Map([["eg", ["111"]]]), ...over });
 const head = [...TX_TEMPLATE_COLUMNS];
 const mx = (...rows: unknown[][]): MatrixRow[] => [head, ...rows].map((r, i) => ({ n: i + 1, cells: [undefined, ...r] }));
-const row = (o: Partial<Record<(typeof TX_TEMPLATE_COLUMNS)[number], unknown>>) => TX_TEMPLATE_COLUMNS.map((c) => o[c] ?? "");
+// Unggah mewajibkan tanggal_spm_sp2d: bila tidak disebut, pakai tanggal_transaksi (isi "" untuk menguji kosong).
+const row = (o: Partial<Record<(typeof TX_TEMPLATE_COLUMNS)[number], unknown>>) => TX_TEMPLATE_COLUMNS.map((c) => (c === "tanggal_spm_sp2d" && !("tanggal_spm_sp2d" in o) ? o.tanggal_transaksi : o[c]) ?? "");
 const run = (rows: unknown[][], l = lk()) => { const m = mx(...rows), h = findTxHeader(m); if ("error" in h) throw new Error(h.error); return parseTxRows(m, h.map, l); };
 const base = { kode_subkegiatan: "1.01.01", kode_rekening: "5.1.02", nilai: "1.000.000,00" };
 
@@ -42,19 +43,19 @@ describe("matchMethod: metode pemilihan menurut Perpres 16/2018 jo. 12/2021 jo. 
   it("singkatan PL ambigu ditolak; yang tidak dikenal null", () => { expect(matchMethod("PL", methods)).toBeNull(); expect(matchMethod("lelang", methods)).toBeNull(); expect(matchMethod("", methods)).toBeNull(); });
 });
 describe("parseTxRows: tahapan ditentukan oleh tanggal SPM/SP2D (atau tanggal transaksi)", () => {
-  it("belum ada SPM/SP2D: tanggal transaksi menentukan (Murni), non-pengadaan", () => {
-    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026" })]); expect(r.errors).toEqual([]);
-    expect(r.valid[0]).toMatchObject({ stage_code: "MURNI", entry_id: "em", basis: "transaksi", payment_status: "belum", proses: "non_pengadaan", amount: "1000000.00", payment_date: null, payment_number: null, method_id: null });
+  it("tanggal SPM/SP2D menentukan tahapan (Murni), non-pengadaan", () => {
+    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "12/03/2026" })]); expect(r.errors).toEqual([]);
+    expect(r.valid[0]).toMatchObject({ stage_code: "MURNI", entry_id: "em", basis: "spm_sp2d", payment_status: "sudah", proses: "non_pengadaan", amount: "1000000.00", payment_date: "2026-03-12", payment_number: null, method_id: null });
+  });
+  it("unggah tanpa tanggal SPM/SP2D ditolak (tidak diakui sebagai realisasi); arahkan ke input manual", () => {
+    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "" }), row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "", no_spm_sp2d: "SPM/9" })]);
+    expect(r.valid).toEqual([]); expect(r.errors.map((e) => e.field)).toEqual(["tanggal_spm_sp2d", "tanggal_spm_sp2d"]); expect(r.errors[0]!.hint).toContain("Input manual");
   });
   it("transaksi di Murni tetapi tanggal SPM/SP2D di Pergeseran: mengikuti tanggal SPM/SP2D", () => {
     const r = run([row({ ...base, tanggal_transaksi: "20/04/2026", tanggal_spm_sp2d: "05/05/2026", no_spm_sp2d: "SP2D/1" })]);
     expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ stage_code: "PERGESERAN", entry_id: "eg", basis: "spm_sp2d", ref_date: "2026-05-05", payment_status: "sudah", payment_number: "SP2D/1" });
   });
   it("tepat pada tanggal berlaku sudah masuk tahapan baru", () => { expect(run([row({ ...base, tanggal_transaksi: "01/05/2026" })]).valid[0]?.stage_code).toBe("PERGESERAN"); expect(run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "01/09/2026" })]).valid[0]?.stage_code).toBe("PERUBAHAN"); });
-  it("nomor tanpa tanggal: boleh (dilengkapi kemudian), peringatan, tahapan mengikuti tanggal transaksi", () => {
-    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", no_spm_sp2d: "SPM/9" })]); expect(r.errors).toEqual([]);
-    expect(r.valid[0]).toMatchObject({ stage_code: "MURNI", payment_number: "SPM/9", payment_date: null }); expect(r.warnings[0]?.message).toContain("tanpa tanggal");
-  });
   it("tanggal tanpa nomor: boleh (nomor menyusul)", () => { const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "12/03/2026" })]); expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ payment_date: "2026-03-12", payment_number: null }); });
   it("tanggal SPM/SP2D di luar tahun anggaran atau tidak terbaca ditolak", () => {
     expect(run([row({ ...base, tanggal_transaksi: "10/12/2026", tanggal_spm_sp2d: "05/01/2027" })]).errors[0]?.field).toBe("tanggal_spm_sp2d");
@@ -78,7 +79,7 @@ describe("parseTxRows: pengadaan, RUP, dan metode pemilihan", () => {
 describe("parseTxRows: pemeriksaan data", () => {
   it("tahun di luar tahun anggaran ditolak", () => expect(run([row({ ...base, tanggal_transaksi: "10/03/2027" })]).errors[0]?.message).toContain("2026"));
   it("tanggal tidak terbaca / nilai tidak valid / nilai nol", () => {
-    const r = run([row({ ...base, tanggal_transaksi: "kemarin" }), row({ ...base, tanggal_transaksi: "10/03/2026", nilai: "abc" }), row({ ...base, tanggal_transaksi: "10/03/2026", nilai: "0" })]);
+    const r = run([row({ ...base, tanggal_transaksi: "kemarin", tanggal_spm_sp2d: "10/03/2026" }), row({ ...base, tanggal_transaksi: "10/03/2026", nilai: "abc" }), row({ ...base, tanggal_transaksi: "10/03/2026", nilai: "0" })]);
     expect(r.errors.map((e) => `${e.row}:${e.field}`)).toEqual(["2:tanggal_transaksi", "3:nilai", "4:nilai"]);
   });
   it("nilai minus dicatat sebagai koreksi (tetap minus)", () => expect(run([row({ ...base, tanggal_transaksi: "10/03/2026", nilai: "-250.000" })]).valid[0]?.amount).toBe("-250000.00"));
@@ -108,8 +109,8 @@ describe("kompatibilitas file format lama", () => {
     expect(r.warnings.filter((w) => w.row === 0).map((w) => w.message).join(" ")).toContain("kode_paket");
   });
   it("jenis koreksi/pembatalan dengan nilai positif tetap menjadi nilai minus (tidak diam-diam menambah realisasi)", () => {
-    expect(go(old(["10/03/2026", "1.01.01", "5.1.02", "", "koreksi", "", "", "", "", "", "", "100000"])).valid[0]?.amount).toBe("-100000.00");
-    expect(go(old(["10/03/2026", "1.01.01", "5.1.02", "", "pembatalan", "", "", "", "", "", "", "-100000"])).valid[0]?.amount).toBe("-100000.00");
+    expect(go(old(["10/03/2026", "1.01.01", "5.1.02", "", "koreksi", "", "", "", "", "", "10/03/2026", "100000"])).valid[0]?.amount).toBe("-100000.00");
+    expect(go(old(["10/03/2026", "1.01.01", "5.1.02", "", "pembatalan", "", "", "", "", "", "10/03/2026", "-100000"])).valid[0]?.amount).toBe("-100000.00");
   });
 });
 describe("alur berkas sungguhan", () => {
@@ -125,7 +126,7 @@ describe("alur berkas sungguhan", () => {
     expect(r.valid[0]).toMatchObject({ stage_code: "PERGESERAN", rup_package_id: "rup-g", method_id: "m-ep", amount: "2500000.50", transaction_date: "2026-04-20", payment_date: "2026-05-05", payment_number: "S1" });
   });
   it("CSV titik koma gaya Excel Indonesia (tanggal dd/mm/yyyy, angka koma desimal)", () => {
-    const csv = "tanggal_transaksi;kode_subkegiatan;kode_rekening;nilai\n15/03/2026;1.01.01;5.1.02;\"1.250.000,75\"\n";
+    const csv = "tanggal_transaksi;kode_subkegiatan;kode_rekening;tanggal_spm_sp2d;nilai\n15/03/2026;1.01.01;5.1.02;15/03/2026;\"1.250.000,75\"\n";
     const m = parseCsv(csv), h = findTxHeader(m); if ("error" in h) throw new Error(h.error);
     const r = parseTxRows(m, h.map, lk()); expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ amount: "1250000.75", stage_code: "MURNI" });
   });
