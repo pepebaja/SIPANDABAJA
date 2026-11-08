@@ -15,3 +15,10 @@ describe("buildPerformance", () => {
   it("tanpa pejabat dikelompokkan", () => expect(r.officers.some((o) => o.officer === "(Belum ditetapkan)")).toBe(true));
   it("total, kendala, terlambat", () => { expect(r.all.total).toBe(4); expect(r.obstacles).toEqual([{ name: "Dokumen", n: 1 }]); expect(r.overdue.map((p) => p.id)).toEqual(["3"]); });
 });
+
+import { packageCreateSchema, modeOfMethod } from "@/lib/packages";
+describe("packageCreateSchema (kode paket = kode RUP)", () => {
+  it("membersihkan spasi dan .0 pada kode RUP", () => expect(packageCreateSchema.parse({ rup_code: " 1234 5678.0 ", ppbj_id: "", ppk_id: "", pptk_id: "", due_date: "" }).rup_code).toBe("12345678"));
+  it("kode RUP wajib", () => expect(packageCreateSchema.safeParse({ rup_code: "  ", ppbj_id: "", ppk_id: "", pptk_id: "", due_date: "" }).success).toBe(false));
+  it("swakelola dikenali dari nama metode", () => { expect(modeOfMethod("Swakelola Tipe I")).toBe("swakelola"); expect(modeOfMethod("E-purchasing")).toBe("penyedia"); expect(modeOfMethod(null)).toBe("penyedia"); });
+});
