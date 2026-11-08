@@ -122,3 +122,9 @@ Service-role key hanya untuk server/skrip.
 - **Pemeriksaan unggahan**: tanggal tidak terbaca, di luar tahun anggaran, atau belum terjadi (setelah hari ini) ditolak dengan saran perbaikan; daftar masalah dapat diunduh sebagai CSV.
 - **Reset**: Input Realisasi > Riwayat unggahan > *Reset data realisasi* (Super Admin/Admin OPD). Wajib unduh cadangan (Excel, format template) dan ketik `RESET <tahun>`.
 - Migrasi baru: `20260114`, `20260115`, `20260116` (jalankan berurutan di Supabase SQL Editor).
+
+## Penyederhanaan proses pengadaan
+- **Kode paket = kode RUP.** Paket dibuat dari paket RUP (tombol *Buat paket dari semua RUP* atau *Tambah paket* dengan memilih satu kode RUP); nama, pagu, dan metode terisi otomatis. Kode paket lama otomatis disamakan dengan kode RUP (migrasi `20260117`).
+- **Tanggal**: formulir hanya meminta *Target selesai (tenggat)*. Tanggal mulai proses, selesai proses, dan serah terima terisi otomatis saat status paket diubah. Kolom *tanggal penugasan* dihapus dari formulir.
+- Tautan "Proses pengadaan" di Input Realisasi diganti keterangan; realisasi tertaut ke paket otomatis lewat kode RUP.
+- Sisa istilah/verifikasi transaksi dihapus dari layar, laporan, dan cetak.
