@@ -8,7 +8,7 @@ const all = [murni, pergeseran, perubahan];
 describe("referenceDate: tanggal SPM/SP2D, bila belum ada tanggal transaksi", () => {
   it("sudah ada tanggal SPM/SP2D: itu yang dipakai", () => expect(referenceDate({ transactionDate: "2026-04-10", paymentDate: "2026-05-02" })).toEqual({ date: "2026-05-02", basis: "spm_sp2d" }));
   it("belum ada: tanggal transaksi", () => { expect(referenceDate({ transactionDate: "2026-04-10", paymentDate: null })).toEqual({ date: "2026-04-10", basis: "transaksi" }); expect(referenceDate({ transactionDate: "2026-04-10" })).toEqual({ date: "2026-04-10", basis: "transaksi" }); });
-  it("status SPM/SP2D", () => { expect(paymentStatusOf({ paymentDate: "2026-01-01" })).toBe("sudah"); expect(paymentStatusOf({})).toBe("belum"); });
+  it("status SPM/SP2D", () => { expect(paymentStatusOf({ paymentDate: "2026-01-01" })).toBe("sudah_spm_sp2d"); expect(paymentStatusOf({})).toBe("belum_spm_sp2d"); });
 });
 describe("resolveVersion: tahapan berlaku pada tanggal acuan", () => {
   it("sebelum Pergeseran = Murni (otomatis berlaku 1 Januari)", () => { expect(resolveVersion(all, 2026, "2026-01-01")?.id).toBe("m"); expect(resolveVersion(all, 2026, "2026-04-30")?.id).toBe("m"); });

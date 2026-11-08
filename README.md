@@ -116,3 +116,9 @@ Service-role key hanya untuk server/skrip.
 ## Tambahan: anggaran kas antartahapan dan laporan kinerja
 - **Anggaran kas**: di menu Anggaran kas tersedia tombol *Salin anggaran kas* yang menyalin kas tahapan sebelumnya (Murni → Pergeseran → Perubahan) lalu dapat disesuaikan lewat input manual/unggah Excel. Sub kegiatan dan belanja baru (setelah anggaran tahapan itu diimpor) dibiarkan kosong untuk diisi.
 - **Laporan kinerja pejabat pengadaan**: Laporan & dokumen > *Laporan kinerja pejabat pengadaan* (`/laporan/kinerja-pengadaan`), berformat presentasi dengan kerangka tata naskah dinas, filter pejabat, dan cetak/PDF.
+
+## Realisasi: pengakuan, status, dan reset
+- **Pengakuan**: transaksi diakui sebagai realisasi bila Tanggal SPM/SP2D terisi (status `sudah_spm_sp2d`). Tanpa tanggal itu, transaksi tetap dicatat dengan status `belum_spm_sp2d` (belum diakui, tetap menahan pagu), baik lewat input manual maupun unggah Excel/CSV.
+- **Pemeriksaan unggahan**: tanggal tidak terbaca, di luar tahun anggaran, atau belum terjadi (setelah hari ini) ditolak dengan saran perbaikan; daftar masalah dapat diunduh sebagai CSV.
+- **Reset**: Input Realisasi > Riwayat unggahan > *Reset data realisasi* (Super Admin/Admin OPD). Wajib unduh cadangan (Excel, format template) dan ketik `RESET <tahun>`.
+- Migrasi baru: `20260114`, `20260115`, `20260116` (jalankan berurutan di Supabase SQL Editor).

@@ -45,15 +45,26 @@ describe("matchMethod: metode pemilihan menurut Perpres 16/2018 jo. 12/2021 jo. 
 describe("parseTxRows: tahapan ditentukan oleh tanggal SPM/SP2D (atau tanggal transaksi)", () => {
   it("tanggal SPM/SP2D menentukan tahapan (Murni), non-pengadaan", () => {
     const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "12/03/2026" })]); expect(r.errors).toEqual([]);
-    expect(r.valid[0]).toMatchObject({ stage_code: "MURNI", entry_id: "em", basis: "spm_sp2d", payment_status: "sudah", proses: "non_pengadaan", amount: "1000000.00", payment_date: "2026-03-12", payment_number: null, method_id: null });
+    expect(r.valid[0]).toMatchObject({ stage_code: "MURNI", entry_id: "em", basis: "spm_sp2d", payment_status: "sudah_spm_sp2d", proses: "non_pengadaan", amount: "1000000.00", payment_date: "2026-03-12", payment_number: null, method_id: null });
   });
-  it("unggah tanpa tanggal SPM/SP2D ditolak (tidak diakui sebagai realisasi); arahkan ke input manual", () => {
-    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "" }), row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "", no_spm_sp2d: "SPM/9" })]);
-    expect(r.valid).toEqual([]); expect(r.errors.map((e) => e.field)).toEqual(["tanggal_spm_sp2d", "tanggal_spm_sp2d"]); expect(r.errors[0]!.hint).toContain("Input manual");
+  it("tanpa tanggal SPM/SP2D: tetap dicatat berstatus belum_spm_sp2d (tahapan sementara dari tanggal transaksi)", () => {
+    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "" })]);
+    expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ stage_code: "MURNI", basis: "transaksi", payment_status: "belum_spm_sp2d", payment_date: null });
   });
+  it("nomor tanpa tanggal: dicatat belum_spm_sp2d dengan peringatan", () => {
+    const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "", no_spm_sp2d: "SPM/9" })]);
+    expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ payment_status: "belum_spm_sp2d", payment_number: "SPM/9" }); expect(r.warnings[0]?.message).toContain("belum_spm_sp2d");
+  });
+  it("tanggal yang belum terjadi ditolak (transaksi maupun SPM/SP2D) bila hari ini diketahui", () => {
+    const l = lk({ today: "2026-11-08" });
+    expect(run([row({ ...base, tanggal_transaksi: "10/12/2026" })], l).errors.map((e) => e.field)).toContain("tanggal_transaksi");
+    expect(run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "20/12/2026" })], l).errors.map((e) => e.field)).toEqual(["tanggal_spm_sp2d"]);
+    expect(run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "08/11/2026" })], l).errors).toEqual([]);
+  });
+  it("SPM/SP2D terlalu jauh setelah tanggal transaksi: peringatan", () => expect(run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "10/09/2026" })]).warnings.some((w) => /hari setelah/.test(w.message))).toBe(true));
   it("transaksi di Murni tetapi tanggal SPM/SP2D di Pergeseran: mengikuti tanggal SPM/SP2D", () => {
     const r = run([row({ ...base, tanggal_transaksi: "20/04/2026", tanggal_spm_sp2d: "05/05/2026", no_spm_sp2d: "SP2D/1" })]);
-    expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ stage_code: "PERGESERAN", entry_id: "eg", basis: "spm_sp2d", ref_date: "2026-05-05", payment_status: "sudah", payment_number: "SP2D/1" });
+    expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ stage_code: "PERGESERAN", entry_id: "eg", basis: "spm_sp2d", ref_date: "2026-05-05", payment_status: "sudah_spm_sp2d", payment_number: "SP2D/1" });
   });
   it("tepat pada tanggal berlaku sudah masuk tahapan baru", () => { expect(run([row({ ...base, tanggal_transaksi: "01/05/2026" })]).valid[0]?.stage_code).toBe("PERGESERAN"); expect(run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "01/09/2026" })]).valid[0]?.stage_code).toBe("PERUBAHAN"); });
   it("tanggal tanpa nomor: boleh (nomor menyusul)", () => { const r = run([row({ ...base, tanggal_transaksi: "10/03/2026", tanggal_spm_sp2d: "12/03/2026" })]); expect(r.errors).toEqual([]); expect(r.valid[0]).toMatchObject({ payment_date: "2026-03-12", payment_number: null }); });
