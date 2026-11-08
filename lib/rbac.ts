@@ -30,7 +30,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   super_admin: "Akses penuh, termasuk pengaturan sistem dan pengelolaan semua pengguna.",
-  admin_opd: "Mengelola pengguna operasional, anggaran, master data, dan verifikasi.",
+  admin_opd: "Mengelola pengguna operasional, anggaran, dan master data.",
   ppbj: "Mengimpor anggaran serta mengelola paket RUP dan paket pengadaan.",
   ppk: "Mencatat kontrak/SP dan data pelaksanaan paket.",
   pptk: "Pelaksana teknis kegiatan; mengakses data sesuai hak akses.",

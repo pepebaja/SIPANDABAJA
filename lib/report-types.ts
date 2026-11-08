@@ -12,11 +12,11 @@ export type Report = {
 export type ReportMeta = { slug: string; title: string; description: string; landscape: boolean; needsVersion: boolean; permission?: Permission };
 
 export const REPORTS: ReportMeta[] = [
-  { slug: "anggaran-realisasi", title: "Rekapitulasi Anggaran dan Realisasi", description: "Pagu, realisasi terverifikasi, belum diverifikasi, sisa, dan persentase per rekening anggaran.", landscape: true, needsVersion: true },
+  { slug: "anggaran-realisasi", title: "Rekapitulasi Anggaran dan Realisasi", description: "Pagu, realisasi diakui (sudah SPM/SP2D), belum_spm_sp2d, sisa, dan persentase per rekening anggaran.", landscape: true, needsVersion: true },
   { slug: "paket-pengadaan", title: "Daftar Paket Pengadaan", description: "Seluruh paket pengadaan beserta metode, pejabat, pagu, nilai kontrak/SP, dan status.", landscape: true, needsVersion: true },
   { slug: "paket-rup", title: "Daftar Paket RUP", description: "Paket RUP dengan pagu, total alokasi ke rekening, dan sisa yang belum dialokasikan.", landscape: true, needsVersion: true },
   { slug: "anggaran-kas", title: "Rencana Anggaran Kas", description: "Rencana kas per triwulan berhierarki Program > Kegiatan > Sub Kegiatan > Belanja, lengkap dengan subtotal.", landscape: true, needsVersion: true },
-  { slug: "transaksi", title: "Daftar Transaksi Realisasi", description: "Seluruh transaksi realisasi (pembayaran, koreksi, pembatalan) beserta status verifikasi.", landscape: true, needsVersion: true },
+  { slug: "transaksi", title: "Daftar Transaksi Realisasi", description: "Seluruh transaksi realisasi (pembayaran, koreksi, pembatalan) beserta status pengakuan (sudah SPM/SP2D atau belum_spm_sp2d).", landscape: true, needsVersion: true },
   { slug: "pengguna", title: "Daftar Pengguna Aplikasi", description: "Username, nama, peran, dan status akun pengguna.", landscape: false, needsVersion: false, permission: "users:read" },
   { slug: "log-audit", title: "Log Audit Aktivitas", description: "1.000 catatan aktivitas terbaru: siapa, melakukan apa, pada objek apa.", landscape: false, needsVersion: false, permission: "audit:read" },
 ];

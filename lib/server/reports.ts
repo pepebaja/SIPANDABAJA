@@ -46,10 +46,10 @@ export async function buildReport(slug: string, { sb, ctx, session }: Ctx): Prom
         return { report: { ...base, columns: [
           { key: "no", label: "No", kind: "int", align: "center", width: 6 }, { key: "sub", label: "Subkegiatan", width: 16 }, { key: "rek", label: "Rekening", width: 18 },
           { key: "uraian", label: "Uraian", width: 44 }, { key: "dana", label: "Sumber dana", width: 14 }, { key: "pagu", label: "Pagu", kind: "money", width: 18 },
-          { key: "real", label: "Realisasi terverifikasi", kind: "money", width: 20 }, { key: "belum", label: "Belum diverifikasi", kind: "money", width: 18 },
+          { key: "real", label: "Realisasi diakui (sudah SPM/SP2D)", kind: "money", width: 20 }, { key: "belum", label: "belum_spm_sp2d", kind: "money", width: 18 },
           { key: "sisa", label: "Sisa pagu", kind: "money", width: 18 }, { key: "pct", label: "%", kind: "percent", align: "right", width: 10 }],
           rows, totals: { uraian: "TOTAL", pagu: t.pagu, real: t.verified, belum: t.unverified, sisa: t.remaining, pct: t.percent },
-          notes: ["Realisasi, sisa, dan persentase dihitung dari transaksi terverifikasi saja.", "Nilai kontrak/SP tidak dihitung sebagai realisasi.", ...(t.unverifiedCount ? [`${t.unverifiedCount} transaksi belum diverifikasi tidak ikut dihitung sebagai realisasi.`] : [])] } };
+          notes: ["Realisasi, sisa, dan persentase dihitung dari transaksi yang sudah memiliki tanggal SPM/SP2D; transaksi belum_spm_sp2d tercatat terpisah.", "Nilai kontrak/SP tidak dihitung sebagai realisasi.", ...(t.unverifiedCount ? [`${t.unverifiedCount} transaksi belum diverifikasi tidak ikut dihitung sebagai realisasi.`] : [])] } };
       }
       case "paket-pengadaan": {
         const [pk, ct, st] = await Promise.all([
@@ -110,14 +110,14 @@ export async function buildReport(slug: string, { sb, ctx, session }: Ctx): Prom
       }
       case "transaksi": {
         const [entries, tx] = await Promise.all([loadEntryRows(sb, vid!),
-          fetchAll<any>((f, t) => sb.from("transactions").select("id, transaction_date, amount, verification_status, budget_entry_id, payment_date, payment_number, rup:rup_packages(rup_code), method:procurement_methods(name)").eq("budget_version_id", vid!).order("transaction_date", { ascending: false }).order("id").range(f, t))]);
+          fetchAll<any>((f, t) => sb.from("transactions").select("id, transaction_date, amount, budget_entry_id, payment_date, payment_number, rup:rup_packages(rup_code), method:procurement_methods(name)").eq("budget_version_id", vid!).order("transaction_date", { ascending: false }).order("id").range(f, t))]);
         const lab = new Map(entries.map((e) => [e.id, entryLabel(e)]));
-        const rows = tx.map((t, i) => ({ no: i + 1, tgl: fmtDate(t.transaction_date), rek: lab.get(t.budget_entry_id) ?? "-", rup: t.rup?.rup_code ?? "-", metode: t.method?.name ?? "-", spm: [t.payment_date ? fmtDate(t.payment_date) : "", t.payment_number ?? ""].join(" ").trim() || "-", nilai: m(t.amount), status: t.verification_status === "verified" ? "Terverifikasi" : "Belum diverifikasi", v: t.verification_status }));
+        const rows = tx.map((t, i) => ({ no: i + 1, tgl: fmtDate(t.transaction_date), rek: lab.get(t.budget_entry_id) ?? "-", rup: t.rup?.rup_code ?? "-", metode: t.method?.name ?? "-", spm: [t.payment_date ? fmtDate(t.payment_date) : "", t.payment_number ?? ""].join(" ").trim() || "-", nilai: m(t.amount), status: t.payment_date ? "Diakui (sudah SPM/SP2D)" : "belum_spm_sp2d", v: t.payment_date ? "verified" : "unverified" }));
         const ver = sum(rows.filter((r) => r.v === "verified").map((r) => r.nilai)), unv = sum(rows.filter((r) => r.v !== "verified").map((r) => r.nilai));
         return { report: { ...base, columns: [
           { key: "no", label: "No", kind: "int", align: "center", width: 6 }, { key: "tgl", label: "Tanggal", align: "center", width: 12 }, { key: "rek", label: "Rekening anggaran", width: 46 }, { key: "rup", label: "Kode RUP", width: 14 },
           { key: "metode", label: "Metode pemilihan", width: 20 }, { key: "spm", label: "Tgl / No SPM-SP2D", width: 26 }, { key: "nilai", label: "Nilai", kind: "money", width: 18 }, { key: "status", label: "Status", width: 20 }],
-          rows, totals: { rek: "TOTAL TERVERIFIKASI", nilai: ver }, notes: [`Total belum diverifikasi (tidak dihitung sebagai realisasi): ${new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2 }).format(Number(unv))}.`, "Koreksi bernilai negatif."] } };
+          rows, totals: { rek: "TOTAL REALISASI DIAKUI (sudah SPM/SP2D)", nilai: ver }, notes: [`Total belum_spm_sp2d (tercatat, belum diakui sebagai realisasi): ${new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2 }).format(Number(unv))}.`, "Koreksi bernilai negatif."] } };
       }
       case "pengguna": {
         const [pf, rl] = await Promise.all([
