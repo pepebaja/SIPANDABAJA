@@ -2,8 +2,8 @@
 export type StageVersion = { id: string; stageCode: string; stageName: string; sortOrder: number; versionNo: number; effectiveFrom: string | null };
 export type Basis = "spm_sp2d" | "transaksi";
 export const BASIS_LABEL: Record<Basis, string> = { spm_sp2d: "Tanggal SPM/SP2D", transaksi: "Tanggal transaksi" };
-export type PaymentStatus = "sudah" | "belum";
-export const PAYMENT_LABEL: Record<PaymentStatus, string> = { sudah: "Sudah SPM/SP2D", belum: "Belum SPM/SP2D" };
+export type PaymentStatus = "sudah_spm_sp2d" | "belum_spm_sp2d";
+export const PAYMENT_LABEL: Record<PaymentStatus, string> = { sudah_spm_sp2d: "Sudah SPM/SP2D (diakui)", belum_spm_sp2d: "belum_spm_sp2d (belum diakui)" };
 
 /**
  * Tanggal acuan penentu tahapan: Tanggal SPM/SP2D bila sudah ada; bila belum, tanggal transaksi.
@@ -12,7 +12,7 @@ export const PAYMENT_LABEL: Record<PaymentStatus, string> = { sudah: "Sudah SPM/
 export function referenceDate(t: { transactionDate: string; paymentDate?: string | null }): { date: string; basis: Basis } {
   return t.paymentDate ? { date: t.paymentDate, basis: "spm_sp2d" } : { date: t.transactionDate, basis: "transaksi" };
 }
-export const paymentStatusOf = (t: { paymentDate?: string | null }): PaymentStatus => (t.paymentDate ? "sudah" : "belum");
+export const paymentStatusOf = (t: { paymentDate?: string | null }): PaymentStatus => (t.paymentDate ? "sudah_spm_sp2d" : "belum_spm_sp2d");
 
 /**
  * Tanggal mulai berlaku bawaan (bulan-tanggal) bila admin belum mengaturnya di panel Aturan tahapan anggaran:

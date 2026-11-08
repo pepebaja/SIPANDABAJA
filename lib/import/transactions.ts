@@ -51,6 +51,7 @@ export function findTxHeader(rows: MatrixRow[]): { map: TxHeaderMap } | { error:
 export type TxEntry = { id: string; versionId: string; sub: string; acc: string; fund: string; desc: string; subId: string; accId: string; fundId: string | null };
 export type TxMethod = { id: string; code: string; name: string };
 export type TxLookup = {
+  /** Hari ini (YYYY-MM-DD, WIB) untuk menolak tanggal yang belum terjadi; kosong = tidak diperiksa. */ today?: string;
   year: number; versions: StageVersion[]; entries: TxEntry[]; methods: TxMethod[];
   rupByVersion: Map<string, Map<string, { id: string; methodId: string | null }>>;     // versionId -> kode RUP -> {id, metode rencana}
   allocRupByEntry?: Map<string, string[]>;                                              // entryId -> kode RUP yang dialokasikan ke rekening itu
@@ -106,9 +107,12 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
     const dateParts = [parseDateCell(at(r, "paytgl")), parseDateCell(at(r, "sp2dtgl")), parseDateCell(at(r, "spmtgl"))];
     if (dateParts.some((d) => d === null)) err("tanggal_spm_sp2d", `Tanggal tidak dapat dibaca: "${g("paytgl") || g("sp2dtgl") || g("spmtgl")}"`, "Gunakan format 15/03/2026");
     const payDate = dateParts.find((d) => d) || null, payNo = (g("payno") || g("sp2dno") || g("spmno")) || null;
-    // Unggah Excel: realisasi hanya dicatat dan diakui bila Tanggal SPM/SP2D terisi (tahapan ditentukan olehnya). Tanpa tanggal: input manual.
-    if (!payDate && !dateParts.some((d) => d === null)) err("tanggal_spm_sp2d", "Kosong. Realisasi lewat unggah hanya diakui bila tanggal SPM/SP2D terisi", "Isi tanggal_spm_sp2d. Transaksi yang belum memiliki tanggal SPM/SP2D dicatat lewat tab Input manual");
     if (payDate && Number(payDate.slice(0, 4)) !== lk.year) err("tanggal_spm_sp2d", `Tanggal ${payDate} di luar tahun anggaran ${lk.year}`, "Realisasi dicatat pada tahun anggaran yang sama dengan tanggal SPM/SP2D");
+    if (payNo && !payDate) warn("No SPM/SP2D terisi tetapi tanggalnya kosong; transaksi tetap berstatus belum_spm_sp2d (belum diakui) sampai tanggal SPM/SP2D diisi");
+    if (lk.today) {
+      if (tanggal > lk.today) err("tanggal_transaksi", `Tanggal transaksi ${tanggal} belum terjadi (hari ini ${lk.today})`, "Periksa bulan/tahun; format yang dipakai hari/bulan/tahun, mis. 15/03/2026");
+      if (payDate && payDate > lk.today) err("tanggal_spm_sp2d", `Tanggal SPM/SP2D ${payDate} belum terjadi (hari ini ${lk.today})`, "Isi tanggal SPM/SP2D yang sebenarnya terbit; bila belum terbit, kosongkan kolom ini");
+    }
     if (payNo && payNo.length > 100) err("no_spm_sp2d", "Nomor terlalu panjang (maks. 100 karakter)", "Periksa kolom nomor");
     if (g("catatan").length > 500) err("catatan", "Catatan lebih dari 500 karakter", "Persingkat catatan");
     let method: TxMethod | null = null;
@@ -116,6 +120,7 @@ export function parseTxRows(rows: MatrixRow[], map: TxHeaderMap, lk: TxLookup): 
 
     if (errors.length > before) continue;
     const ref = referenceDate({ transactionDate: tanggal, paymentDate: payDate });
+    if (payDate && payDate > tanggal) { const gap = Math.round((Date.parse(payDate) - Date.parse(tanggal)) / 86400000); if (gap > 120) warn(`Tanggal SPM/SP2D ${gap} hari setelah tanggal transaksi; pastikan tanggalnya benar`); }
     if (ref.basis === "spm_sp2d" && ref.date < tanggal) warn(`Tanggal SPM/SP2D (${ref.date}) lebih awal dari tanggal transaksi (${tanggal}); tahapan mengikuti tanggal SPM/SP2D`);
     const ver = resolveVersion(lk.versions, lk.year, ref.date);
     if (!ver) { err("tahapan", `Tidak ada tahapan anggaran yang berlaku pada ${ref.date} (${BASIS_LABEL[ref.basis].toLowerCase()})`, "Atur tanggal mulai berlaku tahapan di panel \"Aturan tahapan anggaran\" dan pastikan versi anggarannya sudah disiapkan"); continue; }
