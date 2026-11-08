@@ -22,7 +22,7 @@ const FLOW: [string, string, string][] = [
   ["Siapkan dan impor anggaran", "Impor anggaran", "Klik Siapkan versi anggaran (sekali per tahun/tahapan), unduh template Excel, isi, lalu unggah (.xlsx maks. 5 MB). Klik Periksa file; bila ada baris bermasalah, perbaiki lalu unggah ulang. Setelah semua valid, klik Konfirmasi dan simpan."],
   ["Isi atau perbarui paket RUP", "Paket RUP", "Unggah file RUP dari SIRUP (kode baru ditambah, kode yang sama diperbarui; periksa pratinjau lalu Terapkan) dan/atau tambah, ubah, hapus manual saat anggaran bergeser sehingga RUP berubah."],
   ["Alokasikan paket RUP ke rekening", "Paket RUP", "Buka paket RUP, lalu alokasikan ke rekening anggaran. Sistem menolak alokasi yang melebihi pagu paket atau pagu rekening."],
-  ["Kelola proses pengadaan (opsional)", "Input Realisasi, lalu tautan Proses pengadaan", "Isi kode, nama, pagu, metode, dan pejabat. Tautkan ke paket RUP, ubah status sesuai perkembangan, dan catat kontrak/SP bila sudah ada."],
+  ["Kelola proses pengadaan (opsional)", "menu Paket pengadaan", "Klik Buat paket dari semua RUP (atau Tambah paket dengan memilih satu kode RUP). Kode paket sama dengan kode RUP; nama, pagu, dan metode terisi otomatis. Lengkapi PPBJ/PPK/PPTK dan tenggat, ubah status sesuai perkembangan (tanggal mulai/selesai terisi otomatis), dan catat kontrak/SP bila sudah ada."],
   ["Susun anggaran kas", "Anggaran kas", "Rencana kas disusun per TRIWULAN (TW I-IV) untuk setiap Program, Kegiatan, Sub Kegiatan, dan Belanja. Isi manual pada tabel (tombol ÷4 membagi pagu rata), atau unggah file Excel/PDF lalu periksa pratinjau sebelum diterapkan. Peringatan membantu mendeteksi kas yang melebihi pagu atau belum selaras dengan jadwal paket."],
   ["Unggah realisasi dari Excel/CSV", "Input Realisasi > Unggah Excel/CSV", "Atur dulu tanggal mulai berlaku tiap tahapan (panel di bawah kotak unggah; Murni otomatis 1 Januari). Unduh template (10 kolom: tanggal transaksi, kode subkegiatan, kode rekening, sumber dana, kode RUP, metode pemilihan, tanggal dan nomor SPM/SP2D, nilai, catatan), isi, lalu Periksa file. Pratinjau menampilkan tindakan tiap baris (baru, diperbarui, sudah ada, ditolak), tahapan, dan metode. Tidak ada yang tersimpan sebelum Catat."],
   ["Melengkapi nomor SPM/SP2D", "Input Realisasi > Daftar transaksi, atau unggah ulang", "No SPM/SP2D tidak wajib saat pencatatan. Lengkapi lewat tombol Lengkapi/Ubah pada Daftar transaksi, atau unggah ulang baris yang sama (tanggal transaksi, rekening, kode RUP, dan nilai harus sama): transaksi diperbarui, tidak dicatat ganda. Setelah terverifikasi, bagian yang sudah terisi terkunci; yang masih kosong tetap dapat dilengkapi."],
@@ -33,7 +33,7 @@ const FLOW: [string, string, string][] = [
 ];
 const MATRIX: [string, Role[]][] = [
   ["Melihat dashboard, RUP, paket, kas, realisasi, dan laporan data", [...ROLES]],
-  ["Mengisi dan mengubah master data; menyiapkan versi anggaran; memverifikasi transaksi", ["super_admin", "admin_opd"]],
+  ["Mengisi dan mengubah master data; menyiapkan versi anggaran; mengelola anggaran dan transaksi", ["super_admin", "admin_opd"]],
   ["Impor anggaran; mengelola paket RUP, alokasi, paket pengadaan, anggaran kas; input transaksi", ["super_admin", "admin_opd", "ppbj"]],
   ["Mencatat kontrak/SP", ["super_admin", "admin_opd", "ppbj", "ppk"]],
   ["Membuat akun, mengubah peran, reset password, menonaktifkan akun", ["super_admin", "admin_opd"]],
@@ -45,7 +45,7 @@ const FAQ: [string, string][] = [
   ["Muncul pesan \"Username atau password salah\".", "Periksa huruf, tanpa spasi di awal/akhir. Setelah 5 kali gagal, akun terkunci sementara 15 menit. Akun nonaktif juga ditolak."],
   ["Impor anggaran ditolak.", "Biasanya kode subkegiatan, rekening, sumber dana, atau NIP PPTK belum ada di master data, atau pagu bukan angka. Perbaiki sesuai tabel masalah, lalu unggah ulang."],
   ["Realisasi tidak sama dengan perkiraan.", "Realisasi dihitung kumulatif dari tahapan sebelumnya. Periksa transaksi di Daftar transaksi dan peringatan transaksi tahapan sebelumnya yang belum terhitung bila rekeningnya tidak ada di tahapan ini."],
-  ["Salah mencatat transaksi yang sudah terverifikasi.", "Ubah atau hapus langsung di Input Realisasi > Daftar transaksi; setiap perubahan tercatat di Log audit."],
+  ["Salah mencatat transaksi.", "Ubah atau hapus langsung di Input Realisasi > Daftar transaksi; setiap perubahan tercatat di Log audit."],
   ["Bagaimana mengunggah Anggaran Kas?", "Menu Anggaran kas > Unggah file. Paling akurat memakai template Excel (tombol Unduh template; berisi semua rekening anggaran, isi kolom tw1-tw4). PDF berbasis teks juga dapat dibaca otomatis, tetapi hasilnya selalu perlu diperiksa di pratinjau; PDF hasil scan tidak dapat dibaca."],
   ["Baris unggahan realisasi ditolak.", "Baca kolom Masalah dan Saran pada hasil pemeriksaan. Penyebab umum: kode rekening belum ada pada anggaran tahapan yang berlaku di tanggal itu, kode RUP tidak ada pada tahapan itu, tanggal di luar tahun anggaran, metode pemilihan tidak dikenali, atau melebihi sisa pagu/kas. Perbaiki lalu unggah ulang; baris yang sudah tercatat otomatis dilewati."],
   ["Data tidak muncul.", "Pastikan tahun dan tahapan di bagian atas sudah benar, dan versi anggaran untuk periode itu sudah disiapkan."],

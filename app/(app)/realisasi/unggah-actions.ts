@@ -119,14 +119,6 @@ export async function deleteTxImportJob(fd: FormData): Promise<void> {
   await (await createClient()).from("import_jobs").delete().eq("id", id).eq("kind", "transactions").neq("status", "confirmed");
   revalidatePath("/realisasi");
 }
-/** Verifikasi massal transaksi satu unggahan. Hanya admin (dijaga database); tercatat di log audit per transaksi. */
-export async function verifyTxImportJob(fd: FormData): Promise<void> {
-  const id = String(fd.get("jobId") ?? ""); if (!UUID.test(id)) return;
-  const { error } = await (await createClient()).rpc("verify_import_transactions", { p_job: id });
-  revalidatePath("/realisasi"); revalidatePath("/");
-  if (error) redirect("/realisasi?tab=riwayat&error=verify");
-}
-
 export type StageDatesState = { error?: string; ok?: boolean };
 /** Mengatur tanggal mulai berlaku tahapan (Admin). Kunci form: v_<id versi>. Kosong = belum berlaku (Murni otomatis 1 Januari). */
 export async function saveStageDates(_p: StageDatesState, fd: FormData): Promise<StageDatesState> {

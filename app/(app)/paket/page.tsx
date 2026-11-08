@@ -5,11 +5,12 @@ import { formatRupiah } from "@/lib/format";
 import { parseRupiah } from "@/lib/import/parse";
 import { todayIso } from "@/lib/date";
 import { Icon } from "@/components/icons";
+import { generatePackagesFromRup } from "./actions";
 export const metadata = { title: "Paket pengadaan" };
 const PAGE = 25;
 const KELOMPOK: Record<string, string> = { sudah_diproses: "Sudah diproses", belum_diproses: "Belum diproses", selesai: "Selesai", tidak_aktif: "Tidak aktif" };
 const safe = (codes: string[]) => codes.filter((c) => /^[A-Za-z0-9_]+$/.test(c));
-export default async function PaketPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; status?: string; kelompok?: string; filter?: string }> }) {
+export default async function PaketPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; status?: string; kelompok?: string; filter?: string; made?: string; error?: string }> }) {
   const sp = await searchParams; const ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p className="alert alert-info max-w-xl">Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
   const q = (sp.q ?? "").replace(/[%,()*]/g, " ").trim().slice(0, 80), page = Math.max(1, Number(sp.page) || 1);
@@ -37,10 +38,14 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
         <div className="flex flex-wrap gap-2">
           <Link href="/laporan/paket-pengadaan" className="btn btn-ghost"><Icon name="printer" className="h-4 w-4" />Cetak</Link>
           <a href="/api/laporan/paket-pengadaan" className="btn btn-ghost"><Icon name="download" className="h-4 w-4" />Excel</a>
+          <form action={generatePackagesFromRup}><button className="btn btn-ghost" title="Membuat paket untuk semua RUP yang belum punya paket">Buat paket dari semua RUP</button></form>
           <Link href="/paket/baru" className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tambah paket</Link></div>
       </div>
+      {sp.made !== undefined && <p role="status" className="alert alert-info">{Number(sp.made) > 0 ? `${sp.made} paket dibuat dari RUP. Lengkapi PPBJ/PPK/PPTK dan tenggat di rincian paket.` : "Semua RUP sudah punya paket."}</p>}
+      {sp.error && <p role="alert" className="alert alert-error">Gagal membuat paket dari RUP. Anda mungkin tidak berwenang.</p>}
+      <p className="text-sm text-slate-600">Setiap paket mewakili satu kode RUP (kode paket = kode RUP). Ubah status paket sesuai tahap proses; tanggal mulai dan selesai terisi otomatis.</p>
       <form className="flex flex-wrap items-end gap-2">
-        <input name="q" defaultValue={q} placeholder="Cari kode atau nama paket" className="w-full max-w-xs" />
+        <input name="q" defaultValue={q} placeholder="Cari kode RUP atau nama paket" className="w-full max-w-xs" />
         <select name="status" defaultValue={status} aria-label="Filter status"><option value="">Semua status</option>{meta.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select>
         <button className="btn btn-dark">Terapkan</button>
         {(q || active) && <Link href="/paket" className="link text-sm">Reset</Link>}
@@ -48,7 +53,7 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
       {active && <p className="alert alert-info inline-block py-2 text-sm">Filter aktif: <b>{active}</b></p>}
       {error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat. Muat ulang halaman.</p>
         : !data?.length ? <p className="text-slate-600">{q || active ? "Tidak ada paket yang cocok." : "Belum ada paket pada tahun/tahapan ini."}</p> : (
-        <div className="table-wrap"><table><thead><tr><th>Kode</th><th>Nama paket</th><th className="text-right">Pagu</th><th>Status</th><th>Tenggat</th></tr></thead>
+        <div className="table-wrap"><table><thead><tr><th>Kode RUP</th><th>Nama paket</th><th className="text-right">Pagu</th><th>Status</th><th>Tenggat</th></tr></thead>
           <tbody>{data.map((p) => <tr key={p.id}><td><Link className="link" href={`/paket/${p.id}`}>{p.internal_code}</Link></td>
             <td>{p.name}{!p.rup_package_id && <span className="badge badge-warn ml-2">Belum ada kode RUP</span>}</td>
             <td className="text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td><span className="badge badge-info">{statusName.get(p.status) ?? p.status}</span></td>

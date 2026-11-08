@@ -10,7 +10,7 @@ export const metadata = { title: "Masuk" };
 
 const FEATURES: [IconName, string, string][] = [
   ["database", "Anggaran & RUP terpadu", "Impor anggaran, kelola paket RUP dan paket pengadaan."],
-  ["chart", "Realisasi terverifikasi", "Pantau pagu, realisasi, dan sisa anggaran secara akurat."],
+  ["chart", "Realisasi akurat", "Pantau pagu, realisasi, dan sisa anggaran secara akurat."],
   ["shield", "Akses berbasis peran", "Setiap pengguna hanya mengakses data sesuai kewenangan."],
 ];
 const VERSION = `v${process.env.NEXT_PUBLIC_APP_VERSION ?? ""}${process.env.NEXT_PUBLIC_BUILD ? ` · ${process.env.NEXT_PUBLIC_BUILD}` : ""}`;

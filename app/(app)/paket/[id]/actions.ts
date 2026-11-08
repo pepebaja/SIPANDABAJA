@@ -21,6 +21,20 @@ export async function linkRup(fd: FormData): Promise<void> {
   if (!data?.length) redirect(`/paket/${id}?error=rup`);
   revalidatePath(`/paket/${id}`);
 }
+export async function updateDue(fd: FormData): Promise<void> {
+  const id = String(fd.get("id")), due = String(fd.get("due_date") ?? "");
+  if (!uuid.test(id) || (due && !/^\d{4}-\d{2}-\d{2}$/.test(due))) redirect("/paket");
+  const { data } = await (await createClient()).from("procurement_packages").update({ due_date: due || null }).eq("id", id).select("id");
+  if (!data?.length) redirect(`/paket/${id}?error=due`);
+  revalidatePath(`/paket/${id}`); revalidatePath("/paket");
+}
+export async function updateOfficials(fd: FormData): Promise<void> {
+  const id = String(fd.get("id")), v = (k: string) => { const x = String(fd.get(k) ?? ""); return x && uuid.test(x) ? x : null; };
+  if (!uuid.test(id)) redirect("/paket");
+  const { data } = await (await createClient()).from("procurement_packages").update({ ppbj_id: v("ppbj_id"), ppk_id: v("ppk_id"), pptk_id: v("pptk_id") }).eq("id", id).select("id");
+  if (!data?.length) redirect(`/paket/${id}?error=officials`);
+  revalidatePath(`/paket/${id}`);
+}
 export async function addContract(_p: FormState, fd: FormData): Promise<FormState> {
   const packageId = String(fd.get("package_id"));
   if (!uuid.test(packageId)) return { error: "Paket tidak valid." };

@@ -23,13 +23,13 @@ export default async function CetakPaket({ params }: { params: Promise<{ id: str
     sb.from("procurement_events").select("id, from_status, to_status, created_at").eq("procurement_package_id", id).order("created_at"),
     sb.from("contracts_or_orders").select("id, doc_type, doc_number, doc_date, selection_result_value, contract_value, provider:providers(name)").eq("procurement_package_id", id).order("created_at"),
     p.rup_package_id ? sb.from("package_budget_allocations").select("id, amount, entry:budget_entries(description, subactivities(code), expenditure_accounts(code))").eq("rup_package_id", p.rup_package_id) : Promise.resolve({ data: [] as any[] }),
-    sb.from("transactions").select("id, transaction_date, amount, verification_status, payment_date, payment_number, procurement_methods(name)").eq("procurement_package_id", id).order("transaction_date")]);
+    sb.from("transactions").select("id, transaction_date, amount, payment_date, payment_number, procurement_methods(name)").eq("procurement_package_id", id).order("transaction_date")]);
   const sn = new Map((st.data ?? []).map((x) => [x.code, x.name])), name = (c: string) => sn.get(c) ?? c;
   const rows: [string, React.ReactNode][] = [
-    ["Kode paket", p.internal_code], ["Nama paket", p.name], ["Kode RUP", p.rup ? `${p.rup.rup_code} (${p.rup.name})` : "Belum ada kode RUP"],
+    ["Nama paket", p.name], ["Kode RUP (kode paket)", p.rup ? `${p.rup.rup_code} (${p.rup.name})` : "Belum ada kode RUP"],
     ["Cara pelaksanaan", p.execution_mode === "swakelola" ? "Swakelola" : "Melalui penyedia"], ["Metode pemilihan", p.method?.name ?? "-"], ["Pagu", rp(p.pagu)], ["Status", name(p.status)],
     ["PPBJ", Person(p.ppbj)], ["PPK", Person(p.ppk)], ["PPTK", Person(p.pptk)],
-    ["Tanggal penugasan", fmtDate(p.assigned_date)], ["Dokumen diterima", fmtDate(p.docs_received_date)], ["Mulai proses", fmtDate(p.process_start)], ["Selesai proses", fmtDate(p.process_end)],
+    ["Mulai proses", fmtDate(p.process_start)], ["Selesai proses", fmtDate(p.process_end)],
     ["Tenggat", fmtDate(p.due_date)], ["Serah terima", fmtDate(p.handover_date)], ["Kategori kendala", p.obstacle_category ?? "-"], ["Catatan", p.notes ?? "-"]];
   return (
     <section className="space-y-5">
@@ -46,7 +46,7 @@ export default async function CetakPaket({ params }: { params: Promise<{ id: str
           : <p className="text-sm text-slate-600">{p.rup_package_id ? "Belum ada alokasi pada paket RUP terkait." : "Paket belum ditautkan ke paket RUP."}</p>}
         <h3>Realisasi terkait paket</h3>
         {tx.data?.length ? <table><thead><tr><th>Tanggal</th><th>Tgl / No SPM-SP2D</th><th>Metode</th><th className="text-right">Nilai</th><th>Status</th></tr></thead>
-          <tbody>{tx.data.map((t: any) => <tr key={t.id}><td>{fmtDate(t.transaction_date)}</td><td>{t.payment_date ? fmtDate(t.payment_date) : "-"} {t.payment_number ?? ""}</td><td>{t.procurement_methods?.name ?? "-"}</td><td className="text-right">{rp(t.amount)}</td><td>{t.verification_status === "verified" ? "Terverifikasi" : "Belum diverifikasi"}</td></tr>)}</tbody></table>
+          <tbody>{tx.data.map((t: any) => <tr key={t.id}><td>{fmtDate(t.transaction_date)}</td><td>{t.payment_date ? fmtDate(t.payment_date) : "-"} {t.payment_number ?? ""}</td><td>{t.procurement_methods?.name ?? "-"}</td><td className="text-right">{rp(t.amount)}</td><td>{t.payment_date ? "Diakui" : "belum_spm_sp2d"}</td></tr>)}</tbody></table>
           : <p className="text-sm text-slate-600">Belum ada transaksi realisasi yang ditautkan ke paket ini.</p>}
         <h3>Riwayat status</h3>
         {ev.data?.length ? <ul className="list-disc space-y-0.5 pl-5 text-sm">{ev.data.map((e) => <li key={e.id}>{fmtDateTime(e.created_at)}: {e.from_status ? `${name(e.from_status)} menjadi ` : "dibuat sebagai "}{name(e.to_status)}</li>)}</ul> : <p className="text-sm text-slate-600">Belum ada riwayat.</p>}
