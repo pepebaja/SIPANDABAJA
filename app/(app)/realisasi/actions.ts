@@ -90,3 +90,21 @@ export async function deleteTransaction(fd: FormData): Promise<void> {
   if (error || !data?.length) redirect("/realisasi?tab=daftar&error=delete");
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
 }
+
+/**
+ * Mereset (menghapus) SELURUH transaksi realisasi pada tahun anggaran aktif untuk memulai pencatatan ulang dari awal.
+ * Hanya Super Admin/Admin OPD; wajib mengetik "RESET <tahun>" dan mengakui sudah mengunduh cadangan. Jejak tetap ada di Log audit.
+ */
+export async function resetTransactions(fd: FormData): Promise<void> {
+  const s = await getSession(); if (!s || !can(s.roles, "budget-setup:write")) redirect("/realisasi?tab=riwayat&reset=denied");
+  const ctx = await getBudgetContext(); if (!ctx) redirect("/realisasi?tab=riwayat&reset=denied");
+  if (String(fd.get("confirm") ?? "").trim().toUpperCase() !== `RESET ${ctx.year}` || fd.get("backup") !== "on") redirect("/realisasi?tab=riwayat&reset=confirm");
+  const sb = await createClient();
+  const { data: vs } = await sb.from("budget_versions").select("id").eq("budget_year_id", ctx.yearId), ids = (vs ?? []).map((v) => v.id as string);
+  if (!ids.length) redirect("/realisasi?tab=riwayat&reset=0");
+  const { data, error } = await sb.from("transactions").delete().in("budget_version_id", ids).select("id");
+  if (error) redirect("/realisasi?tab=riwayat&reset=error");
+  await sb.from("import_jobs").delete().eq("kind", "transactions");          // riwayat unggahan realisasi ikut dibersihkan (bila diizinkan)
+  revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
+  redirect(`/realisasi?tab=riwayat&reset=${data?.length ?? 0}`);
+}

@@ -62,7 +62,7 @@ export async function stageTxImport(_p: TxImportState, fd: FormData): Promise<Tx
   const rupByVersion = new Map<string, Map<string, { id: string; methodId: string | null }>>();
   for (const r of rups) (rupByVersion.get(r.budget_version_id) ?? rupByVersion.set(r.budget_version_id, new Map()).get(r.budget_version_id)!).set(r.rup_code, { id: r.id, methodId: r.planned_method_id ?? null });
   const allocRupByEntry = new Map<string, string[]>(); for (const a of allocs) allocRupByEntry.set(a.budget_entry_id, [...(allocRupByEntry.get(a.budget_entry_id) ?? []), a.rup_packages.rup_code]);
-  const lk: TxLookup = { year: ctx.year, versions, rupByVersion, allocRupByEntry, methods: methods.map((m: any) => ({ id: m.id, code: m.code, name: m.name })),
+  const lk: TxLookup = { today: new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10), year: ctx.year, versions, rupByVersion, allocRupByEntry, methods: methods.map((m: any) => ({ id: m.id, code: m.code, name: m.name })),
     entries: ents.map((e: any) => ({ id: e.id, versionId: e.budget_version_id, sub: e.subactivities?.code ?? "", acc: e.expenditure_accounts?.code ?? "", fund: e.funding_sources?.code ?? "", desc: e.description, subId: e.subactivity_id, accId: e.account_id, fundId: e.funding_source_id ?? null })) };
 
   const res = parseTxRows(matrix, h.map, lk);
