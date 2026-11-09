@@ -125,6 +125,8 @@ Service-role key hanya untuk server/skrip.
 
 ## Penyederhanaan proses pengadaan
 - **Kode paket = kode RUP.** Paket dibuat dari paket RUP (tombol *Buat paket dari semua RUP* atau *Tambah paket* dengan memilih satu kode RUP); nama, pagu, dan metode terisi otomatis. Kode paket lama otomatis disamakan dengan kode RUP (migrasi `20260117`).
+- **Peringkat metode pemilihan di Beranda.** Tabel jumlah paket pekerjaan per metode pemilihan, diurutkan dari realisasi tertinggi ke terendah (realisasi diakui, kumulatif tahapan). Membutuhkan migrasi `20260118_peringkat_metode.sql`; tanpa migrasi, Beranda tetap menampilkan daftar jumlah paket per metode seperti sebelumnya.
+- **Filter & kontrol data di Daftar transaksi realisasi.** Filter bertingkat Program → Kegiatan → Sub kegiatan, rentang tanggal (tanggal transaksi atau tanggal SPM/SP2D), dan *Kontrol data* (belum bertanggal SPM/SP2D, No SPM/SP2D kosong, pengadaan tanpa kode RUP, metode kosong, koreksi). Hasil menampilkan jumlah transaksi dan total nilai; formulir *Ubah* kini juga dapat melengkapi metode pemilihan, dan setelah menyimpan Anda kembali ke daftar dengan filter yang sama.
 - **Tanggal**: formulir hanya meminta *Target selesai (tenggat)*. Tanggal mulai proses, selesai proses, dan serah terima terisi otomatis saat status paket diubah. Kolom *tanggal penugasan* dihapus dari formulir.
 - Tautan "Proses pengadaan" di Input Realisasi diganti keterangan; realisasi tertaut ke paket otomatis lewat kode RUP.
 - Sisa istilah/verifikasi transaksi dihapus dari layar, laporan, dan cetak.
