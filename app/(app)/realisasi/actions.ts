@@ -25,7 +25,15 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   let dup = sb.from("transactions").select("id", { count: "exact", head: true }).eq("budget_version_id", ctx.versionId).eq("budget_entry_id", d.budget_entry_id).eq("transaction_date", d.transaction_date).eq("amount", d.amount);
   dup = d.rup_package_id ? dup.eq("rup_package_id", d.rup_package_id) : dup.is("rup_package_id", null);
   if (((await dup).count ?? 0) > 0) return { error: "Transaksi dengan tanggal, rekening, kode RUP, dan nilai yang sama sudah tercatat. Untuk melengkapi No SPM/SP2D, ubah lewat Daftar transaksi atau unggah ulang." };
-  const { error } = await sb.from("transactions").insert({ ...d, budget_version_id: ctx.versionId });
+  // Penyedia: pilih dari master, atau ketik nama baru (dicocokkan tanpa membedakan huruf/spasi/tanda baca agar tidak dobel).
+  const { new_provider_name, ...row } = d; let providerId = row.provider_id;
+  if (providerId) { const { data: pv } = await sb.from("providers").select("is_active").eq("id", providerId).maybeSingle(); if (!pv?.is_active) return { error: "Penyedia yang dipilih tidak ditemukan atau nonaktif." }; }
+  else if (new_provider_name) {
+    const r = await sb.rpc("ensure_provider", { p_name: new_provider_name });
+    if (r.error) return { error: r.error.code === "P0001" ? r.error.message : r.error.code === "42883" ? "Migrasi database 20260119 (penyedia pada transaksi) belum dijalankan di Supabase." : "Penyedia baru gagal disimpan. Anda mungkin tidak berwenang." };
+    providerId = r.data as string;
+  }
+  const { error } = await sb.from("transactions").insert({ ...row, provider_id: providerId, budget_version_id: ctx.versionId });
   if (error?.code === "P0001") return { error: error.message };
   if (error?.code === "23502" || error?.code === "42703" || error?.message?.includes("schema cache")) return { error: MIGRASI };
   if (error) return { error: "Gagal menyimpan. Anda mungkin tidak berwenang mencatat realisasi." };
@@ -43,7 +51,7 @@ const back = (fd: FormData): string => { const b = String(fd.get("back") ?? "");
 export async function updateTransaction(fd: FormData): Promise<void> {
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect(`${back(fd)}&error=payment`);
   const p = transactionEditSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) redirect(`${back(fd)}&error=payment`);
-  const sb = await createClient(), { id, payment_number, payment_date, rup_code, method_id, transaction_date, amount, notes } = p.data;
+  const sb = await createClient(), { id, payment_number, payment_date, rup_code, method_id, provider_id, transaction_date, amount, notes } = p.data;
   const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, transaction_date, payment_date, payment_number").eq("id", id).maybeSingle();
   if (!row) redirect(`${back(fd)}&error=payment`);
   const patch: Record<string, unknown> = {};
@@ -80,6 +88,7 @@ export async function updateTransaction(fd: FormData): Promise<void> {
     if (!rp) redirect(`${back(fd)}&error=rup`);
     patch.rup_package_id = rp.id; if (!row.procurement_method_id && rp.planned_method_id) patch.procurement_method_id = rp.planned_method_id;
   }
+  if (provider_id) patch.provider_id = provider_id;
   if (method_id) patch.procurement_method_id = method_id;   // metode pemilihan eksplisit dari formulir menggantikan metode bawaan RUP
   if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect(`${back(fd)}&error=${error.code === "P0001" ? "limit" : "payment"}&msg=${encodeURIComponent(error.code === "P0001" ? error.message.slice(0, 200) : "")}`); }
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");

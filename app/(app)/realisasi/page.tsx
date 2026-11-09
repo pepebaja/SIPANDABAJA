@@ -33,7 +33,7 @@ const Skeleton = ({ h = "h-40" }: { h?: string }) => <div className={`card ${h} 
 // ---------- tab: input manual (memuat seluruh rekening/RUP/paket; di-stream) ----------
 async function ManualTab({ sb, vid, year }: { sb: SupabaseClient; vid: string; year: number }) {
   const form = await loadRealizationForm(sb, vid);
-  return form.entries.length ? <TransactionForm year={year} entries={form.entries} rups={form.rups} methods={form.methods} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} />
+  return form.entries.length ? <TransactionForm year={year} entries={form.entries} rups={form.rups} methods={form.methods} providers={form.providers} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} />
     : <p className="alert alert-warn">Belum ada rekening anggaran. Impor anggaran lebih dulu.</p>;
 }
 
@@ -45,7 +45,7 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
 
 // ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
 // Relasi bersarang !inner agar filter program/kegiatan/sub kegiatan dapat diterapkan langsung di database (tanpa daftar ID panjang pada URL).
-const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts(code)), rup_packages(rup_code)";
+const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts(code)), rup_packages(rup_code)";
 const SUM_SEL = "amount, payment_date, budget_entries!inner(subactivity_id, subactivities!inner(activity_id, activities!inner(program_id)))";
 const label = (r: any) => r.budget_entries ? `${r.budget_entries.subactivities?.code ?? ""} / ${r.budget_entries.expenditure_accounts?.code ?? ""}: ${r.budget_entries.description}` : "-";
 const ERRORS: Record<string, string> = {
@@ -70,11 +70,12 @@ async function filteredTotals(sb: SupabaseClient, vid: string, yearId: string, f
 }
 async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient; vid: string; yearId: string; sp: SP; canWrite: boolean }) {
   const f = parseTxFilter(sp), filtered = hasTxFilter(f), page = Math.max(1, Number(sp.page) || 1);
-  const [versions, programs, activities, subs, methods] = await Promise.all([loadStageVersions(sb, yearId),
+  const [versions, programs, activities, subs, methods, provs] = await Promise.all([loadStageVersions(sb, yearId),
     fetchAll<any>((a, b) => sb.from("programs").select("id, code, name").order("code").range(a, b)),
     fetchAll<any>((a, b) => sb.from("activities").select("id, code, name, program_id").order("code").range(a, b)),
     fetchAll<any>((a, b) => sb.from("subactivities").select("id, code, name, activity_id").order("code").range(a, b)),
-    canWrite ? fetchAll<any>((a, b) => sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[])]);
+    canWrite ? fetchAll<any>((a, b) => sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[]),
+    canWrite ? fetchAll<any>((a, b) => sb.from("providers").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[])]);
   const cur = versions.find((v) => v.id === vid);
   const ids = versions.filter((v) => v.id === vid || (cur && v.sortOrder < cur.sortOrder)).map((v) => v.id), stageOf = new Map(versions.map((v) => [v.id, v.stageName]));
   const scope = ids.length ? ids : [vid];
@@ -102,7 +103,7 @@ async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient
               <td className="min-w-40 text-sm">{r.payment_date || r.payment_number ? <>{r.payment_date ? fmtDate(r.payment_date) : <span className="badge badge-warn">tanggal belum diisi</span>}<span className="block text-xs text-slate-600">{r.payment_number ?? <span className="text-amber-800">nomor belum diisi</span>}</span></> : <span className="badge badge-warn">belum_spm_sp2d</span>}{!r.payment_date && <span className="block text-xs text-slate-500">dicatat, belum diakui sebagai realisasi</span>}</td>
               <td className="min-w-52 text-xs text-slate-600">{pg && <span className="block">Program {pg.code}: {pg.name}</span>}{ac && <span className="block">Kegiatan {ac.code}: {ac.name}</span>}{sa && <span className="block font-medium text-slate-800">Sub {sa.code}: {sa.name}</span>}</td>
               <td className="min-w-48 text-sm">{label(r)}</td>
-              <td className="text-sm">{r.rup_packages?.rup_code ? <>RUP {r.rup_packages.rup_code}{!r.procurement_methods?.name && <span className="block text-xs text-amber-800">metode pemilihan belum diisi</span>}</> : <span className={r.procurement_methods?.name ? "text-amber-800" : "text-slate-500"}>{r.procurement_methods?.name ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{r.procurement_methods?.name && <span className="block text-xs text-slate-600">{r.procurement_methods.name}</span>}</td>
+              <td className="text-sm">{r.rup_packages?.rup_code ? <>RUP {r.rup_packages.rup_code}{!r.procurement_methods?.name && <span className="block text-xs text-amber-800">metode pemilihan belum diisi</span>}</> : <span className={r.procurement_methods?.name ? "text-amber-800" : "text-slate-500"}>{r.procurement_methods?.name ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{r.procurement_methods?.name && <span className="block text-xs text-slate-600">{r.procurement_methods.name}</span>}{r.providers?.name ? <span className="block text-xs text-slate-800">Penyedia: {r.providers.name}</span> : r.procurement_methods?.name && <span className="block text-xs text-amber-800">penyedia belum diisi</span>}</td>
               <td className={`text-right tabular-nums ${Number(r.amount) < 0 ? "text-amber-800" : ""}`}>{rp(r.amount)}{Number(r.amount) < 0 && <span className="block text-xs">koreksi</span>}</td>
               {canWrite && <td className="min-w-44 text-sm">
                 <details><summary className="link cursor-pointer text-xs">Ubah</summary>
@@ -113,6 +114,7 @@ async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient
                     <label className="block text-xs">No SPM/SP2D (isi manual)<input name="payment_number" defaultValue={r.payment_number ?? ""} maxLength={100} className="mt-0.5 w-full py-1" /></label>
                     <label className="block text-xs">Kode RUP (boleh menyusul)<input name="rup_code" defaultValue={r.rup_packages?.rup_code ?? ""} maxLength={50} inputMode="numeric" className="mt-0.5 w-full py-1" /></label>
                     <label className="block text-xs">Metode pemilihan<select name="method_id" defaultValue={r.procurement_method_id ?? ""} className="mt-0.5 w-full py-1"><option value="">(tidak diubah)</option>{methods.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+                    <label className="block text-xs">Penyedia<select name="provider_id" defaultValue={r.provider_id ?? ""} className="mt-0.5 w-full py-1"><option value="">(tidak diubah)</option>{provs.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
                     <label className="block text-xs">Catatan<input name="notes" defaultValue={r.notes ?? ""} maxLength={500} className="mt-0.5 w-full py-1" /></label>
                     <p className="text-[11px] text-slate-500">Perubahan langsung berlaku. Bila tanggal SPM/SP2D pindah tahapan, transaksi dipindah otomatis.</p>
                     <button className="btn btn-ghost btn-sm">Simpan</button></form></details>

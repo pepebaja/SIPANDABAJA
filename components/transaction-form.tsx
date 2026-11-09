@@ -1,8 +1,9 @@
 "use client";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { addTransaction } from "@/app/(app)/realisasi/actions";
 import type { FormState } from "@/app/(app)/master/actions";
-import type { FormEntry, FormMethod, FormRup } from "@/lib/server/realization-form-data";
+import type { FormEntry, FormMethod, FormProvider, FormRup } from "@/lib/server/realization-form-data";
+import { checkTransactionInput, payDateOutOfYear } from "@/lib/realization-checks";
 import { computeLimits, quarterOfDate } from "@/lib/realization-limits";
 import { QUARTER_SHORT } from "@/lib/cash";
 import { parseRupiah } from "@/lib/import/parse";
@@ -14,10 +15,15 @@ const today = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 1
 const hit = (hay: string, q: string) => q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.toLowerCase().includes(w));
 
 /** Input Realisasi terpadu: pilih RUP (opsional) dan rekening dari arsip anggaran; sisa pagu RUP, pagu rekening, dan kas kumulatif tampil langsung. */
-export function TransactionForm({ year, entries, rups, methods, allocByRup, hasCashPlan }: { year: number; entries: FormEntry[]; rups: FormRup[]; methods: FormMethod[]; allocByRup: Record<string, string[]>; hasCashPlan: boolean }) {
+export function TransactionForm({ year, entries, rups, methods, providers, allocByRup, hasCashPlan }: { year: number; entries: FormEntry[]; rups: FormRup[]; methods: FormMethod[]; providers: FormProvider[]; allocByRup: Record<string, string[]>; hasCashPlan: boolean }) {
   const [s, action, pending] = useActionState<FormState, FormData>(addTransaction, {});
   const [rupId, setRupId] = useState(""), [entryId, setEntryId] = useState(""), [date, setDate] = useState(today), [amount, setAmount] = useState(""), [methodId, setMethodId] = useState(""), [methodTouched, setMethodTouched] = useState(false);
-  const [qRup, setQRup] = useState(""), [qEntry, setQEntry] = useState("");
+  const [qRup, setQRup] = useState(""), [qEntry, setQEntry] = useState(""), [qProv, setQProv] = useState("");
+  const [providerId, setProviderId] = useState(""), [provTouched, setProvTouched] = useState(false), [newProv, setNewProv] = useState("");
+  const [payDate, setPayDate] = useState(""), [payNo, setPayNo] = useState(""), [notes, setNotes] = useState("");
+  const amountRef = useRef<HTMLInputElement>(null);
+  // Setelah tersimpan: kosongkan isian yang khas per transaksi, pertahankan RUP/rekening/tanggal/metode/penyedia untuk input berikutnya.
+  useEffect(() => { if (s.ok) { setAmount(""); setPayDate(""); setPayNo(""); setNotes(""); amountRef.current?.focus(); } }, [s]);
   const rup = rups.find((r) => r.id === rupId) ?? null, entry = entries.find((e) => e.id === entryId) ?? null;
   const allocated = useMemo(() => new Set(rupId ? allocByRup[rupId] ?? [] : []), [rupId, allocByRup]);
   const rupOpts = useMemo(() => rups.filter((r) => r.id === rupId || hit(`${r.code} ${r.name}`, qRup)).slice(0, ENTRY_CAP), [rups, qRup, rupId]);
@@ -27,6 +33,10 @@ export function TransactionForm({ year, entries, rups, methods, allocByRup, hasC
   const lim = entry && q ? computeLimits(entry, q, rup) : null;
   const val = parseRupiah(amount), isPayment = val !== null && toCents(val) > 0n, over = isPayment && lim && toCents(val!) > toCents(lim.max);
   const method = methodTouched ? methodId : (rup?.methodId ?? methodId);        // metode mengikuti rencana RUP sampai diubah pengguna
+  const provider = provTouched ? providerId : (rup?.providerId ?? providerId);          // penyedia mengikuti kontrak paket RUP sampai diubah pengguna
+  const provOpts = useMemo(() => providers.filter((p) => p.id === provider || hit(p.name, qProv)).slice(0, ENTRY_CAP), [providers, qProv, provider]);
+  const payOut = payDateOutOfYear(payDate, year);
+  const checks = checkTransactionInput({ year, date, payDate, hasRup: !!rupId, hasMethod: !!method, hasProvider: !!provider, hasNewProvider: !provider && newProv.trim().length >= 3 });
   const f = (v: string) => formatRupiah(v);
   return (
     <form action={action} className="card space-y-4 p-4">
@@ -52,8 +62,8 @@ export function TransactionForm({ year, entries, rups, methods, allocByRup, hasC
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm font-medium">3. Tanggal transaksi *<input type="date" name="transaction_date" required value={date} onChange={(e) => setDate(e.target.value)} className={cls} />
           <span className="text-xs font-normal text-slate-500">{outOfYear ? <b className="text-red-700">Harus di tahun anggaran {year}</b> : q ? `Masuk ${QUARTER_SHORT[q - 1]}` : ""}</span></label>
-        <label className="block text-sm font-medium">Nilai (Rp) *<input name="amount" required inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className={cls} aria-invalid={!!over} />
-          <span className="text-xs font-normal text-slate-500">{val !== null && toCents(val) < 0n ? <b className="text-amber-800">Nilai minus dicatat sebagai koreksi (mengurangi realisasi)</b> : "Isi minus (-) untuk koreksi/pengurangan"}</span></label>
+        <label className="block text-sm font-medium">Nilai (Rp) *<input name="amount" ref={amountRef} required inputMode="decimal" autoComplete="off" value={amount} onChange={(e) => setAmount(e.target.value)} className={cls} aria-invalid={!!over || (!!amount && val === null)} />
+          <span className="text-xs font-normal text-slate-500">{amount && val === null ? <b className="text-red-700">Angka tidak dikenali. Contoh: 1.250.000 atau 1250000,50</b> : val !== null && toCents(val) < 0n ? <b className="text-amber-800">Koreksi {f(val)} (mengurangi realisasi)</b> : val !== null ? <b className="text-slate-800">{f(val)}</b> : "Isi minus (-) untuk koreksi/pengurangan"}</span></label>
         <label className="block text-sm font-medium">Metode pemilihan <span className="font-normal text-slate-500">(opsional)</span><select name="procurement_method_id" value={method} onChange={(e) => { setMethodId(e.target.value); setMethodTouched(true); }} className={cls}><option value="">(non-pengadaan / belum ditentukan)</option>{methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
       </div>
       {entry && lim && (
@@ -67,13 +77,28 @@ export function TransactionForm({ year, entries, rups, methods, allocByRup, hasC
           {isPayment && <p className={`text-sm ${over ? "font-semibold text-red-700" : "text-slate-700"}`}>Maksimal yang dapat dicatat pada {q ? QUARTER_SHORT[q - 1] : "tanggal ini"}: <b>{f(lim.max)}</b> <span className="text-slate-500">(dibatasi oleh {lim.limitedBy === "kas" ? "sisa kas kumulatif" : lim.limitedBy === "pagu" ? "pagu rekening" : "pagu RUP"})</span>{over && " - nilai melebihi batas, akan ditolak."}</p>}
           <p className="text-xs text-slate-500">Sisa dihitung dari semua transaksi tercatat . Kas triwulan berikutnya tidak dapat dipakai untuk triwulan sebelumnya.</p>
         </div>)}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label className="block text-sm font-medium">Tanggal SPM/SP2D <span className="font-normal text-slate-500">(penentu tahapan &amp; pengakuan realisasi)</span><input type="date" name="payment_date" className={cls} /><span className="mt-1 block text-xs font-normal text-slate-600">Boleh dikosongkan: transaksi dicatat dengan status <b>belum_spm_sp2d</b> (belum diakui sebagai realisasi, tetap menahan pagu) dan baru diakui setelah tanggal ini diisi lewat Daftar transaksi &gt; Ubah. Tahapan sementara mengikuti tanggal transaksi.</span></label>
-        <label className="block text-sm font-medium">No SPM/SP2D <span className="font-normal text-slate-500">(dapat dilengkapi kemudian)</span><input name="payment_number" maxLength={100} className={cls} /></label>
-        <label className="block text-sm font-medium">Catatan<input name="notes" maxLength={500} className={cls} /></label>
+      <div className="space-y-2 rounded-xl border border-slate-200 p-3">
+        <p className="text-sm font-medium">4. Penyedia pelaksana pekerjaan <span className="font-normal text-slate-500">(untuk pengadaan; boleh menyusul)</span></p>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="space-y-1"><input value={qProv} onChange={(e) => setQProv(e.target.value)} placeholder="Cari nama penyedia" className="w-full py-1.5" aria-label="Cari penyedia" />
+            <select name="provider_id" value={provider} onChange={(e) => { setProviderId(e.target.value); setProvTouched(true); if (e.target.value) setNewProv(""); }} className="w-full"><option value="">(belum dipilih)</option>{provOpts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            {rup?.providerId && provider === rup.providerId && !provTouched && <p className="text-xs text-slate-600">Terisi otomatis dari penyedia pada kontrak paket RUP ini.</p>}</div>
+          <label className="block text-sm">Atau tambah penyedia baru<input name="new_provider_name" value={newProv} onChange={(e) => { setNewProv(e.target.value); if (e.target.value) { setProviderId(""); setProvTouched(true); } }} maxLength={200} disabled={!!provider} placeholder={provider ? "Kosongkan pilihan di kiri untuk mengetik nama baru" : "Ketik nama lengkap, mis. PT Maju Jaya"} autoComplete="off" className={cls} />
+            <span className="text-xs text-slate-500">Nama yang sudah ada (tanpa membedakan huruf, spasi, dan titik/koma) dipakai ulang, tidak dibuat dobel.</span></label>
+        </div>
       </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block text-sm font-medium">Tanggal SPM/SP2D <span className="font-normal text-slate-500">(penentu tahapan &amp; pengakuan realisasi)</span><input type="date" name="payment_date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className={cls} aria-invalid={payOut} />{payOut && <span className="mt-1 block text-xs font-semibold text-red-700">Harus di tahun anggaran {year}</span>}<span className="mt-1 block text-xs font-normal text-slate-600">Boleh dikosongkan: transaksi dicatat dengan status <b>belum_spm_sp2d</b> (belum diakui sebagai realisasi, tetap menahan pagu) dan baru diakui setelah tanggal ini diisi lewat Daftar transaksi &gt; Ubah. Tahapan sementara mengikuti tanggal transaksi.</span></label>
+        <label className="block text-sm font-medium">No SPM/SP2D <span className="font-normal text-slate-500">(dapat dilengkapi kemudian)</span><input name="payment_number" maxLength={100} value={payNo} onChange={(e) => setPayNo(e.target.value)} autoComplete="off" className={cls} /></label>
+        <label className="block text-sm font-medium">Catatan<input name="notes" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} autoComplete="off" className={cls} /></label>
+      </div>
+      {checks.length > 0 && <ul className="space-y-1" aria-label="Pemeriksaan isian">{checks.map((c) => <li key={c.text} className={`alert text-sm ${c.level === "warn" ? "alert-warn" : "alert-info"}`}>{c.text}</li>)}</ul>}
+      {entry && val !== null && date && (
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-3 text-sm" aria-label="Ringkasan sebelum simpan"><p className="font-semibold">Periksa sebelum menyimpan</p>
+          <p>{toCents(val) < 0n ? "Koreksi" : "Pembayaran"} <b>{f(val)}</b> pada <b>{date}</b> untuk <b>{entry.sub.split(" ")[0]} / {entry.acc.split(" ")[0]}</b>{rup ? <>, RUP <b>{rup.code}</b></> : ", tanpa RUP"}{method ? <>, metode <b>{methods.find((m) => m.id === method)?.name}</b></> : ""}{provider ? <>, penyedia <b>{providers.find((p) => p.id === provider)?.name}</b></> : newProv.trim() ? <>, penyedia baru <b>{newProv.trim()}</b></> : ""}.
+            {payDate ? <> Diakui sebagai realisasi (SPM/SP2D {payDate}).</> : <> Belum diakui sebagai realisasi (menunggu tanggal SPM/SP2D).</>}</p></div>)}
       {s.error && <p role="alert" className="alert alert-error">{s.error}</p>}
-      {s.ok && <p role="status" className="alert alert-ok">Tersimpan. Sisa pagu dan kas sudah diperbarui.</p>}
-      <button disabled={pending || !!over || outOfYear} className="btn btn-primary">{pending ? "Menyimpan..." : "Simpan realisasi"}</button>
+      {s.ok && <p role="status" className="alert alert-ok">Tersimpan. Sisa pagu dan kas sudah diperbarui. RUP, rekening, tanggal, metode, dan penyedia dipertahankan agar input berikutnya cepat; ubah bila berbeda.</p>}
+      <button disabled={pending || !!over || outOfYear || payOut || (!!amount && val === null)} className="btn btn-primary">{pending ? "Menyimpan..." : "Simpan realisasi"}</button>
     </form>);
 }
