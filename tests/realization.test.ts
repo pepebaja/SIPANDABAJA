@@ -50,3 +50,11 @@ describe("filter daftar transaksi", () => {
     expect(calls).toEqual([`eq:budget_entries.subactivity_id,${id}`, "gte:payment_date,2026-01-01", "lte:payment_date,2026-02-01", "not:payment_date,is,", "is:payment_number,"]);
   });
 });
+import { applyScopeFilter, hasScopeFilter } from "@/lib/realization-filter";
+describe("cakupan filter rekening", () => {
+  it("jalur relasi sesuai tingkat tanpa awalan", () => {
+    const id = "11111111-2222-3333-4444-555555555555", c: string[] = []; const q: any = new Proxy({}, { get: (_t, k: string) => (...a: unknown[]) => { c.push(`${k}:${a.join(",")}`); return q; } });
+    applyScopeFilter(q, parseTxFilter({ program: id }));
+    expect(c).toEqual([`eq:subactivities.activities.program_id,${id}`]); expect(hasScopeFilter(parseTxFilter({ cek: "koreksi" }))).toBe(false);
+  });
+});
