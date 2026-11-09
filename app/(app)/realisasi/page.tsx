@@ -18,7 +18,9 @@ import { parseRupiah } from "@/lib/import/parse";
 import { fromCents, sumCents } from "@/lib/money";
 import { fetchAll } from "@/lib/server/fetch-all";
 import { RealizationFilter } from "@/components/realization-filter";
-import { CEK_OPTIONS, applyTxFilter, hasTxFilter, parseTxFilter, txFilterParams } from "@/lib/realization-filter";
+import { totals as sumTotals, type Derived } from "@/lib/realization";
+import type { TxFilter } from "@/lib/realization-filter";
+import { CEK_OPTIONS, applyScopeFilter, applyTxFilter, hasScopeFilter, hasTxFilter, parseTxFilter, txFilterParams } from "@/lib/realization-filter";
 import { updateTransaction, deleteTransaction, resetTransactions } from "./actions";
 import { deleteTxImportJob } from "./unggah-actions";
 
@@ -44,7 +46,7 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
 // ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
 // Relasi bersarang !inner agar filter program/kegiatan/sub kegiatan dapat diterapkan langsung di database (tanpa daftar ID panjang pada URL).
 const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts(code)), rup_packages(rup_code)";
-const SUM_SEL = "amount, budget_entries!inner(subactivity_id, subactivities!inner(activity_id, activities!inner(program_id)))";
+const SUM_SEL = "amount, payment_date, budget_entries!inner(subactivity_id, subactivities!inner(activity_id, activities!inner(program_id)))";
 const label = (r: any) => r.budget_entries ? `${r.budget_entries.subactivities?.code ?? ""} / ${r.budget_entries.expenditure_accounts?.code ?? ""}: ${r.budget_entries.description}` : "-";
 const ERRORS: Record<string, string> = {
   payment: "Perubahan ditolak. Periksa isian (tanggal, nilai, nomor) dan hak akses Anda.",
@@ -54,6 +56,18 @@ const ERRORS: Record<string, string> = {
   limit: "Perubahan ditolak karena melampaui batas pagu/anggaran kas.",
   stage: "Tidak ada tahapan anggaran yang berlaku pada tanggal itu. Periksa panel Aturan tahapan anggaran.",
   delete: "Transaksi tidak dapat dihapus. Anda mungkin tidak berwenang." };
+
+/** Ringkasan sesuai filter: pagu rekening pada cakupan program/kegiatan/sub kegiatan (tahapan terpilih) dan transaksi yang lolos SEMUA filter (kumulatif), sehingga kartu di atas sama dengan isi daftar. */
+async function filteredTotals(sb: SupabaseClient, vid: string, yearId: string, f: TxFilter, fullPagu: string): Promise<Derived> {
+  const versions = await loadStageVersions(sb, yearId), cur = versions.find((v) => v.id === vid);
+  const ids = versions.filter((v) => v.id === vid || (cur && v.sortOrder < cur.sortOrder)).map((v) => v.id);
+  const [entries, txs] = await Promise.all([
+    hasScopeFilter(f) ? fetchAll<any>((a, b) => applyScopeFilter(sb.from("budget_entries").select("amount, subactivities!inner(activity_id, activities!inner(program_id))").eq("budget_version_id", vid), f).order("id").range(a, b)) : Promise.resolve(null),
+    fetchAll<any>((a, b) => applyTxFilter(sb.from("transactions").select(SUM_SEL).in("budget_version_id", ids.length ? ids : [vid]), f).order("id").range(a, b))]);
+  const m = (v: unknown) => parseRupiah(v) ?? "0.00", pagu = entries ? fromCents(sumCents(entries.map((e: any) => m(e.amount)))) : fullPagu;
+  const ok = txs.filter((x: any) => x.payment_date), no = txs.filter((x: any) => !x.payment_date);
+  return sumTotals([{ pagu, verified: fromCents(sumCents(ok.map((x: any) => m(x.amount)))), unverified: fromCents(sumCents(no.map((x: any) => m(x.amount)))), txCount: txs.length, unverifiedCount: no.length }]);
+}
 async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient; vid: string; yearId: string; sp: SP; canWrite: boolean }) {
   const f = parseTxFilter(sp), filtered = hasTxFilter(f), page = Math.max(1, Number(sp.page) || 1);
   const [versions, programs, activities, subs, methods] = await Promise.all([loadStageVersions(sb, yearId),
@@ -66,9 +80,8 @@ async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient
   const scope = ids.length ? ids : [vid];
   const listQ = applyTxFilter(sb.from("transactions").select(SEL, { count: "exact" }).in("budget_version_id", scope), f)
     .order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
-  const [tx, sumRows] = await Promise.all([listQ as any, fetchAll<any>((a, b) => applyTxFilter(sb.from("transactions").select(SUM_SEL).in("budget_version_id", scope), f).order("id").range(a, b)).catch(() => null)]);
+  const tx: any = await listQ;
   const rows: any[] = tx.data ?? [], total = tx.count ?? 0, pages = Math.max(1, Math.ceil(total / PAGE));
-  const sumAmount = sumRows ? fromCents(sumCents(sumRows.map((x: any) => parseRupiah(x.amount) ?? "0.00"))) : null;
   const qs = (o: Record<string, string>) => new URLSearchParams({ tab: "daftar", ...Object.fromEntries(Object.entries(o).filter(([, v]) => v)) });
   const pageHref = (p: number) => `/realisasi?${qs({ ...txFilterParams(f), page: String(p) })}`;
   const back = qs({ ...txFilterParams(f), page: String(page) }).toString();
@@ -79,7 +92,7 @@ async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient
       <p className="text-xs text-slate-600">Daftar ini <b>kumulatif</b>: memuat transaksi tahapan <b>{cur?.stageName}</b> beserta tahapan sebelumnya pada tahun yang sama. Tahapan transaksi ditentukan tanggal SPM/SP2D (Murni &lt; 16 Mar; Pergeseran 16 Mar-26 Okt; Perubahan 27 Okt-31 Des).</p>
       <RealizationFilter programs={programs} activities={activities} subs={subs} value={f} active={filtered} />
       {f.dateError && <p role="alert" className="alert alert-warn text-sm">Tanggal awal lebih besar daripada tanggal akhir, sehingga rentang tanggal diabaikan. Periksa kembali isiannya.</p>}
-      {!tx.error && <p className="text-sm text-slate-700" role="status"><b>{total}</b> transaksi{filtered ? " sesuai filter" : ""}{scopeText ? <> (<span className="tabular-nums">{scopeText}</span>)</> : ""}{sumAmount !== null && <> · total nilai <b className="tabular-nums">{rp(sumAmount)}</b></>}
+      {!tx.error && <p className="text-sm text-slate-700" role="status"><b>{total}</b> transaksi{filtered ? " sesuai filter" : ""}{scopeText ? <> (<span className="tabular-nums">{scopeText}</span>)</> : ""}{filtered && <> · angka ringkasan di bagian atas halaman mengikuti filter ini</>}
         {f.cek && <span className="text-slate-600"> · kontrol: {CEK_OPTIONS.find(([k]) => k === f.cek)?.[1]}</span>}</p>}
       {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !rows.length ? <p className="text-slate-600">Belum ada transaksi{filtered ? " dengan filter ini" : ""}.</p> : (
         <div className="table-wrap"><table><thead><tr><th>Tgl transaksi</th><th>Tahapan</th><th>Tanggal / No SPM-SP2D</th><th>Program / kegiatan / sub kegiatan</th><th>Rekening</th><th>RUP / metode</th><th className="text-right">Nilai</th>{canWrite && <th>Aksi</th>}</tr></thead>
@@ -161,19 +174,22 @@ export default async function RealisasiPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams, ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p>Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
   const sb = await createClient(), vid = ctx.versionId;
-  const [{ totals: t, overPaguCount }, session, un] = await Promise.all([loadRealizationTotals(sb, vid), getSession(), sb.rpc("realization_unmapped", { p_version: vid })]);
+  const [{ totals: t0, overPaguCount }, session, un] = await Promise.all([loadRealizationTotals(sb, vid), getSession(), sb.rpc("realization_unmapped", { p_version: vid })]);
   const unmapped = (Array.isArray(un.data) ? un.data[0] : un.data) as { tx_count: number; amount: string } | null;
   const canWrite = !!session && can(session.roles, "realization:write"), canAdmin = !!session && can(session.roles, "budget-setup:write");
   const tabs: [string, string][] = canWrite ? [["unggah", "Unggah Excel/CSV"], ["manual", "Input manual"], ["daftar", "Daftar transaksi"], ["riwayat", "Riwayat unggahan"]] : [["daftar", "Daftar transaksi"]];
   const tab = tabs.some(([k]) => k === sp.tab) ? sp.tab! : "daftar";
+  const fl = parseTxFilter(sp), isFiltered = tab === "daftar" && hasTxFilter(fl);
+  const t = isFiltered ? await filteredTotals(sb, vid, ctx.yearId, fl, t0.pagu).catch(() => t0) : t0;
   const cards: [string, string][] = [["Total pagu rekening", rp(t.pagu)], ["Realisasi diakui (kumulatif)", rp(t.verified)], ["belum_spm_sp2d (belum diakui)", rp(t.unverified)], ["Sisa pagu", rp(t.remaining)], ["Persentase realisasi", t.percent === null ? "N/A" : `${t.percent.replace(".", ",")}%`]];
   return (
     <section className="max-w-6xl space-y-5">
       <div><h1 className="page-title">Input Realisasi <span className="page-sub">Tahun {ctx.year}, {ctx.stageName}</span></h1>
         <p className="text-sm text-slate-600">Realisasi bersifat <b>berkelanjutan</b>: angka tahapan <b>{ctx.stageName}</b> memuat realisasi tahapan sebelumnya terhadap pagu tahapan ini. Transaksi dapat diubah dan dihapus kapan saja; tidak ada verifikasi.
           {" "}Kode RUP pada transaksi otomatis menautkannya ke paket pengadaan (menu Paket pengadaan).</p></div>
+      {isFiltered && <p role="status" className="alert alert-info text-sm">Angka di bawah <b>sesuai filter</b> pada Daftar transaksi (pagu = rekening pada program/kegiatan/sub kegiatan terpilih; realisasi = transaksi yang lolos filter, kumulatif). <Link className="link" href="/realisasi?tab=daftar">Tampilkan seluruh data</Link></p>}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">{cards.map(([k, v]) => <div key={k} className="card p-3"><p className="text-xs text-slate-600">{k}</p><p className="font-semibold tabular-nums">{v}</p></div>)}</div>
-      <p className="text-sm text-slate-600">{t.txCount} transaksi (kumulatif), {t.unverifiedCount} di antaranya berstatus belum_spm_sp2d karena belum ada Tanggal SPM/SP2D: belum diakui sebagai realisasi, tetapi tetap menahan pagu. Isi Tanggal SPM/SP2D di Daftar transaksi untuk mengakuinya. {overPaguCount > 0 && <b className="text-amber-900">Ada {overPaguCount} rekening dengan realisasi melampaui pagu.</b>}</p>
+      <p className="text-sm text-slate-600">{t.txCount} transaksi (kumulatif), {t.unverifiedCount} di antaranya berstatus belum_spm_sp2d karena belum ada Tanggal SPM/SP2D: belum diakui sebagai realisasi, tetapi tetap menahan pagu. Isi Tanggal SPM/SP2D di Daftar transaksi untuk mengakuinya. {!isFiltered && overPaguCount > 0 && <b className="text-amber-900">Ada {overPaguCount} rekening dengan realisasi melampaui pagu.</b>}</p>
       {!!unmapped && Number(unmapped.tx_count) > 0 && <p role="alert" className="alert alert-warn text-sm">{unmapped.tx_count} transaksi tahapan sebelumnya ({rp(parseRupiah(unmapped.amount) ?? "0.00")}) belum terhitung di tahapan ini karena rekening/subkegiatannya tidak ada pada anggaran {ctx.stageName}. Tambahkan rekening padanannya di menu <Link className="link" href="/anggaran/kelola">Kelola anggaran</Link>.</p>}
       <Suspense fallback={<Skeleton h="h-24" />}><StageRecap sb={sb} yearId={ctx.yearId} year={ctx.year} vid={vid} /></Suspense>
       <p className="text-xs text-slate-600">Pilih tahapan di bagian atas layar untuk melihat rekapnya. Rekap berkelanjutan: Pergeseran = Murni + transaksi 16 Mar s.d. 26 Okt; Perubahan = Murni + Pergeseran + transaksi 27 Okt s.d. 31 Des.</p>
