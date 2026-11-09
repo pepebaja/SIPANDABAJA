@@ -1,8 +1,8 @@
 /** Filter Daftar transaksi realisasi (program / kegiatan / sub kegiatan, tanggal, dan kontrol kelengkapan data). Murni: tanpa akses database. */
-export type Cek = "" | "tanpa_tgl" | "tanpa_no" | "tanpa_rup" | "tanpa_metode" | "koreksi";
+export type Cek = "" | "tanpa_tgl" | "tanpa_no" | "tanpa_rup" | "tanpa_metode" | "tanpa_penyedia" | "koreksi";
 export type TxFilter = { program: string; kegiatan: string; sub: string; basis: "transaksi" | "spm"; from: string; to: string; pay: "" | "sudah" | "belum"; proses: "" | "pengadaan" | "non"; cek: Cek };
 export const CEK_OPTIONS: [Cek, string][] = [["", "Semua data"], ["tanpa_tgl", "Belum ada tanggal SPM/SP2D"], ["tanpa_no", "Sudah bertanggal, No SPM/SP2D kosong"],
-  ["tanpa_rup", "Pengadaan tanpa kode RUP"], ["tanpa_metode", "Berkode RUP, metode pemilihan kosong"], ["koreksi", "Koreksi (nilai minus)"]];
+  ["tanpa_rup", "Pengadaan tanpa kode RUP"], ["tanpa_metode", "Berkode RUP, metode pemilihan kosong"], ["tanpa_penyedia", "Pengadaan, penyedia belum diisi"], ["koreksi", "Koreksi (nilai minus)"]];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 export const isIsoDate = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
@@ -48,6 +48,7 @@ export function applyTxFilter<Q extends { eq: Function; gte: Function; lte: Func
   if (f.cek === "tanpa_no") q = q.not("payment_date", "is", null).is("payment_number", null);
   if (f.cek === "tanpa_rup") q = q.is("rup_package_id", null).not("procurement_method_id", "is", null);
   if (f.cek === "tanpa_metode") q = q.not("rup_package_id", "is", null).is("procurement_method_id", null);
+  if (f.cek === "tanpa_penyedia") q = q.is("provider_id", null).or("rup_package_id.not.is.null,procurement_method_id.not.is.null");
   if (f.cek === "koreksi") q = q.lt("amount", 0);
   return q;
 }
