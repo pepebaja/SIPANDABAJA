@@ -23,15 +23,21 @@ export function txFilterParams(f: TxFilter): Record<string, string> {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v));
 }
 export const hasTxFilter = (f: TxFilter): boolean => Object.keys(txFilterParams(f)).length > 0;
+export const hasScopeFilter = (f: TxFilter): boolean => !!(f.sub || f.kegiatan || f.program);
+/** Filter program/kegiatan/sub kegiatan (paling spesifik menang). `prefix` = jalur relasi ke rekening anggaran ("budget_entries." untuk transaksi, "" untuk rekening itu sendiri). */
+export function applyScopeFilter<Q>(q0: Q, f: TxFilter, prefix = ""): Q {
+  const q: any = q0;
+  if (f.sub) return q.eq(`${prefix}subactivity_id`, f.sub);
+  if (f.kegiatan) return q.eq(`${prefix}subactivities.activity_id`, f.kegiatan);
+  if (f.program) return q.eq(`${prefix}subactivities.activities.program_id`, f.program);
+  return q;
+}
 /**
  * Menerapkan filter ke kueri `transactions` Supabase. Kueri HARUS memilih `budget_entries!inner(subactivities!inner(activities!inner(...)))`
  * agar filter program/kegiatan/sub kegiatan pada relasi bersarang dapat dipakai (tanpa daftar ID panjang pada URL).
  */
 export function applyTxFilter<Q extends { eq: Function; gte: Function; lte: Function; is: Function; not: Function; lt: Function; or: Function }>(q0: Q, f: TxFilter): Q {
-  let q: any = q0;
-  if (f.sub) q = q.eq("budget_entries.subactivity_id", f.sub);
-  else if (f.kegiatan) q = q.eq("budget_entries.subactivities.activity_id", f.kegiatan);
-  else if (f.program) q = q.eq("budget_entries.subactivities.activities.program_id", f.program);
+  let q: any = applyScopeFilter(q0, f, "budget_entries.");
   const col = f.basis === "spm" ? "payment_date" : "transaction_date";
   if (f.from) q = q.gte(col, f.from);
   if (f.to) q = q.lte(col, f.to);
