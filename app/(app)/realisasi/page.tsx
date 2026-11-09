@@ -15,12 +15,16 @@ import { StageDatesForm } from "@/components/stage-dates-form";
 import { rp } from "@/lib/format";
 import { fmtDate, fmtDateTime } from "@/lib/date";
 import { parseRupiah } from "@/lib/import/parse";
+import { fromCents, sumCents } from "@/lib/money";
+import { fetchAll } from "@/lib/server/fetch-all";
+import { RealizationFilter } from "@/components/realization-filter";
+import { CEK_OPTIONS, applyTxFilter, hasTxFilter, parseTxFilter, txFilterParams } from "@/lib/realization-filter";
 import { updateTransaction, deleteTransaction, resetTransactions } from "./actions";
 import { deleteTxImportJob } from "./unggah-actions";
 
 export const maxDuration = 60; // unggahan besar (pratinjau + penerapan) membutuhkan beberapa detik
 const PAGE = 25;
-type SP = { reset?: string; tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string };
+type SP = { reset?: string; tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string; program?: string; kegiatan?: string; sub?: string; dari?: string; sampai?: string; basis?: string; cek?: string };
 const pill = (on: boolean) => `rounded-full border px-4 py-1.5 text-sm font-semibold transition ${on ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`;
 const Skeleton = ({ h = "h-40" }: { h?: string }) => <div className={`card ${h} animate-pulse bg-slate-100`} role="status" aria-label="Memuat" />;
 
@@ -38,7 +42,9 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
 }
 
 // ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
-const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), budget_entries(description, subactivities(code), expenditure_accounts(code)), rup_packages(rup_code)";
+// Relasi bersarang !inner agar filter program/kegiatan/sub kegiatan dapat diterapkan langsung di database (tanpa daftar ID panjang pada URL).
+const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts(code)), rup_packages(rup_code)";
+const SUM_SEL = "amount, budget_entries!inner(subactivity_id, subactivities!inner(activity_id, activities!inner(program_id)))";
 const label = (r: any) => r.budget_entries ? `${r.budget_entries.subactivities?.code ?? ""} / ${r.budget_entries.expenditure_accounts?.code ?? ""}: ${r.budget_entries.description}` : "-";
 const ERRORS: Record<string, string> = {
   payment: "Perubahan ditolak. Periksa isian (tanggal, nilai, nomor) dan hak akses Anda.",
@@ -49,50 +55,55 @@ const ERRORS: Record<string, string> = {
   stage: "Tidak ada tahapan anggaran yang berlaku pada tanggal itu. Periksa panel Aturan tahapan anggaran.",
   delete: "Transaksi tidak dapat dihapus. Anda mungkin tidak berwenang." };
 async function DaftarTab({ sb, vid, yearId, sp, canWrite }: { sb: SupabaseClient; vid: string; yearId: string; sp: SP; canWrite: boolean }) {
-  const pay = sp.pay === "sudah" || sp.pay === "belum" ? sp.pay : "", proses = sp.proses === "pengadaan" || sp.proses === "non" ? sp.proses : "";
-  const page = Math.max(1, Number(sp.page) || 1);
-  const versions = await loadStageVersions(sb, yearId), cur = versions.find((v) => v.id === vid);
+  const f = parseTxFilter(sp), filtered = hasTxFilter(f), page = Math.max(1, Number(sp.page) || 1);
+  const [versions, programs, activities, subs, methods] = await Promise.all([loadStageVersions(sb, yearId),
+    fetchAll<any>((a, b) => sb.from("programs").select("id, code, name").order("code").range(a, b)),
+    fetchAll<any>((a, b) => sb.from("activities").select("id, code, name, program_id").order("code").range(a, b)),
+    fetchAll<any>((a, b) => sb.from("subactivities").select("id, code, name, activity_id").order("code").range(a, b)),
+    canWrite ? fetchAll<any>((a, b) => sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[])]);
+  const cur = versions.find((v) => v.id === vid);
   const ids = versions.filter((v) => v.id === vid || (cur && v.sortOrder < cur.sortOrder)).map((v) => v.id), stageOf = new Map(versions.map((v) => [v.id, v.stageName]));
-  let q = sb.from("transactions").select(SEL, { count: "exact" }).in("budget_version_id", ids.length ? ids : [vid]).order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
-  if (pay) q = q.eq("payment_status", pay === "sudah" ? "sudah_spm_sp2d" : "belum_spm_sp2d");
-  if (proses === "pengadaan") q = q.or("rup_package_id.not.is.null,procurement_method_id.not.is.null");
-  if (proses === "non") q = q.is("rup_package_id", null).is("procurement_method_id", null);
-  const tx: any = await q, rows: any[] = tx.data ?? [], pages = Math.max(1, Math.ceil((tx.count ?? 0) / PAGE));
+  const scope = ids.length ? ids : [vid];
+  const listQ = applyTxFilter(sb.from("transactions").select(SEL, { count: "exact" }).in("budget_version_id", scope), f)
+    .order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
+  const [tx, sumRows] = await Promise.all([listQ as any, fetchAll<any>((a, b) => applyTxFilter(sb.from("transactions").select(SUM_SEL).in("budget_version_id", scope), f).order("id").range(a, b)).catch(() => null)]);
+  const rows: any[] = tx.data ?? [], total = tx.count ?? 0, pages = Math.max(1, Math.ceil(total / PAGE));
+  const sumAmount = sumRows ? fromCents(sumCents(sumRows.map((x: any) => parseRupiah(x.amount) ?? "0.00"))) : null;
   const qs = (o: Record<string, string>) => new URLSearchParams({ tab: "daftar", ...Object.fromEntries(Object.entries(o).filter(([, v]) => v)) });
-  const href = (o: Partial<SP>) => `/realisasi?${qs({ pay, proses, ...o, page: "1" } as Record<string, string>)}`;
-  const pageHref = (p: number) => `/realisasi?${qs({ pay, proses, page: String(p) })}`;
-  const group = (title: string, key: "pay" | "proses", cur2: string, opts: [string, string][]) => (
-    <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</span>
-      {opts.map(([v, l]) => <Link key={v} href={href({ [key]: v })} className={pill(v === cur2)} aria-current={v === cur2 ? "true" : undefined}>{l}</Link>)}</div>);
+  const pageHref = (p: number) => `/realisasi?${qs({ ...txFilterParams(f), page: String(p) })}`;
+  const back = qs({ ...txFilterParams(f), page: String(page) }).toString();
+  const scopeText = [f.sub && subs.find((s: any) => s.id === f.sub)?.code, !f.sub && f.kegiatan && activities.find((a: any) => a.id === f.kegiatan)?.code, !f.sub && !f.kegiatan && f.program && programs.find((p: any) => p.id === f.program)?.code].filter(Boolean)[0];
   return (
     <div className="space-y-3">
       {sp.error && <p role="alert" className="alert alert-error">{ERRORS[sp.error] ?? ERRORS.payment}{sp.msg ? ` ${sp.msg}` : ""}</p>}
       <p className="text-xs text-slate-600">Daftar ini <b>kumulatif</b>: memuat transaksi tahapan <b>{cur?.stageName}</b> beserta tahapan sebelumnya pada tahun yang sama. Tahapan transaksi ditentukan tanggal SPM/SP2D (Murni &lt; 16 Mar; Pergeseran 16 Mar-26 Okt; Perubahan 27 Okt-31 Des).</p>
-      <div className="space-y-2" role="group" aria-label="Filter">
-        {group("Pengakuan", "pay", pay, [["", "Semua"], ["sudah", "Diakui (ada tanggal)"], ["belum", "belum_spm_sp2d"]])}
-        {group("Proses", "proses", proses, [["", "Semua"], ["pengadaan", "Pengadaan"], ["non", "Non-pengadaan"]])}
-      </div>
-      {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !rows.length ? <p className="text-slate-600">Belum ada transaksi{pay || proses ? " dengan filter ini" : ""}.</p> : (
-        <div className="table-wrap"><table><thead><tr><th>Tgl transaksi</th><th>Tahapan</th><th>Tanggal / No SPM-SP2D</th><th>Rekening</th><th>RUP / metode</th><th className="text-right">Nilai</th>{canWrite && <th>Aksi</th>}</tr></thead>
-          <tbody>{rows.map((r) => (
+      <RealizationFilter programs={programs} activities={activities} subs={subs} value={f} active={filtered} />
+      {f.dateError && <p role="alert" className="alert alert-warn text-sm">Tanggal awal lebih besar daripada tanggal akhir, sehingga rentang tanggal diabaikan. Periksa kembali isiannya.</p>}
+      {!tx.error && <p className="text-sm text-slate-700" role="status"><b>{total}</b> transaksi{filtered ? " sesuai filter" : ""}{scopeText ? <> (<span className="tabular-nums">{scopeText}</span>)</> : ""}{sumAmount !== null && <> · total nilai <b className="tabular-nums">{rp(sumAmount)}</b></>}
+        {f.cek && <span className="text-slate-600"> · kontrol: {CEK_OPTIONS.find(([k]) => k === f.cek)?.[1]}</span>}</p>}
+      {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !rows.length ? <p className="text-slate-600">Belum ada transaksi{filtered ? " dengan filter ini" : ""}.</p> : (
+        <div className="table-wrap"><table><thead><tr><th>Tgl transaksi</th><th>Tahapan</th><th>Tanggal / No SPM-SP2D</th><th>Program / kegiatan / sub kegiatan</th><th>Rekening</th><th>RUP / metode</th><th className="text-right">Nilai</th>{canWrite && <th>Aksi</th>}</tr></thead>
+          <tbody>{rows.map((r) => { const sa = r.budget_entries?.subactivities, ac = sa?.activities, pg = ac?.programs; return (
             <tr key={r.id}><td className="whitespace-nowrap">{fmtDate(r.transaction_date)}</td>
               <td className="text-sm"><span className="badge badge-off">{stageOf.get(r.budget_version_id) ?? "-"}</span></td>
-              <td className="min-w-40 text-sm">{r.payment_date || r.payment_number ? <>{r.payment_date ? fmtDate(r.payment_date) : <span className="text-slate-500">tanggal belum diisi</span>}<span className="block text-xs text-slate-600">{r.payment_number ?? "nomor belum diisi"}</span></> : <span className="badge badge-warn">belum_spm_sp2d</span>}{!r.payment_date && <span className="block text-xs text-slate-500">dicatat, belum diakui sebagai realisasi</span>}</td>
+              <td className="min-w-40 text-sm">{r.payment_date || r.payment_number ? <>{r.payment_date ? fmtDate(r.payment_date) : <span className="badge badge-warn">tanggal belum diisi</span>}<span className="block text-xs text-slate-600">{r.payment_number ?? <span className="text-amber-800">nomor belum diisi</span>}</span></> : <span className="badge badge-warn">belum_spm_sp2d</span>}{!r.payment_date && <span className="block text-xs text-slate-500">dicatat, belum diakui sebagai realisasi</span>}</td>
+              <td className="min-w-52 text-xs text-slate-600">{pg && <span className="block">Program {pg.code}: {pg.name}</span>}{ac && <span className="block">Kegiatan {ac.code}: {ac.name}</span>}{sa && <span className="block font-medium text-slate-800">Sub {sa.code}: {sa.name}</span>}</td>
               <td className="min-w-48 text-sm">{label(r)}</td>
-              <td className="text-sm">{r.rup_packages?.rup_code ? <>RUP {r.rup_packages.rup_code}</> : <span className="text-slate-500">{r.procurement_methods?.name ? "Tanpa RUP" : "Non-pengadaan"}</span>}{r.procurement_methods?.name && <span className="block text-xs text-slate-600">{r.procurement_methods.name}</span>}</td>
+              <td className="text-sm">{r.rup_packages?.rup_code ? <>RUP {r.rup_packages.rup_code}{!r.procurement_methods?.name && <span className="block text-xs text-amber-800">metode pemilihan belum diisi</span>}</> : <span className={r.procurement_methods?.name ? "text-amber-800" : "text-slate-500"}>{r.procurement_methods?.name ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{r.procurement_methods?.name && <span className="block text-xs text-slate-600">{r.procurement_methods.name}</span>}</td>
               <td className={`text-right tabular-nums ${Number(r.amount) < 0 ? "text-amber-800" : ""}`}>{rp(r.amount)}{Number(r.amount) < 0 && <span className="block text-xs">koreksi</span>}</td>
               {canWrite && <td className="min-w-44 text-sm">
                 <details><summary className="link cursor-pointer text-xs">Ubah</summary>
-                  <form action={updateTransaction} className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2"><input type="hidden" name="id" value={r.id} />
+                  <form action={updateTransaction} className="mt-2 space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="back" value={back} />
                     <label className="block text-xs">Tanggal transaksi<input type="date" name="transaction_date" defaultValue={r.transaction_date} className="mt-0.5 w-full py-1" /></label>
                     <label className="block text-xs">Nilai (minus = koreksi)<input name="amount" defaultValue={r.amount} inputMode="decimal" className="mt-0.5 w-full py-1" /></label>
                     <label className="block text-xs">Tanggal SPM/SP2D<input type="date" name="payment_date" defaultValue={r.payment_date ?? ""} className="mt-0.5 w-full py-1" /></label>
                     <label className="block text-xs">No SPM/SP2D (isi manual)<input name="payment_number" defaultValue={r.payment_number ?? ""} maxLength={100} className="mt-0.5 w-full py-1" /></label>
                     <label className="block text-xs">Kode RUP (boleh menyusul)<input name="rup_code" defaultValue={r.rup_packages?.rup_code ?? ""} maxLength={50} inputMode="numeric" className="mt-0.5 w-full py-1" /></label>
+                    <label className="block text-xs">Metode pemilihan<select name="method_id" defaultValue={r.procurement_method_id ?? ""} className="mt-0.5 w-full py-1"><option value="">(tidak diubah)</option>{methods.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
                     <label className="block text-xs">Catatan<input name="notes" defaultValue={r.notes ?? ""} maxLength={500} className="mt-0.5 w-full py-1" /></label>
                     <p className="text-[11px] text-slate-500">Perubahan langsung berlaku. Bila tanggal SPM/SP2D pindah tahapan, transaksi dipindah otomatis.</p>
                     <button className="btn btn-ghost btn-sm">Simpan</button></form></details>
-                <form action={deleteTransaction} className="mt-1"><input type="hidden" name="id" value={r.id} /><button className="link text-xs text-red-700">Hapus</button></form></td>}</tr>))}</tbody></table></div>)}
+                <form action={deleteTransaction} className="mt-1"><input type="hidden" name="id" value={r.id} /><input type="hidden" name="back" value={back} /><button className="link text-xs text-red-700">Hapus</button></form></td>}</tr>); })}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="link" href={pageHref(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages}</span>{page < pages && <Link className="link" href={pageHref(page + 1)}>Berikutnya</Link>}</nav>
     </div>);
 }
