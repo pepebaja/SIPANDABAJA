@@ -3,15 +3,19 @@ import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/server/session";
 import { getBudgetContext } from "@/lib/server/budget-context";
 import { loadCashEntries } from "@/lib/server/cash-data";
+import { loadStageVersions } from "@/lib/server/stage-versions";
 import { CASH_TEMPLATE_COLUMNS } from "@/lib/cash-import";
 
 export const dynamic = "force-dynamic";
 const LABELS = ["kode_program", "kode_kegiatan", "kode_subkegiatan", "kode_rekening", "kode_sumber_dana", "uraian", "pagu", "tw1", "tw2", "tw3", "tw4"];
 /** Template = seluruh rekening anggaran saat ini beserta nilai kas yang sudah ada; isi kolom tw1-tw4 lalu unggah kembali. */
-export async function GET() {
+export async function GET(req: Request) {
   const s = await getSession(); if (!s) return new Response("Sesi berakhir.", { status: 401 });
   const ctx = await getBudgetContext(); if (!ctx?.versionId) return new Response("Versi anggaran belum disiapkan.", { status: 404 });
-  const { entries } = await loadCashEntries(await createClient(), ctx.versionId);
+  const sb = await createClient(), tahap = new URL(req.url).searchParams.get("tahap");
+  // ?tahap= = tahapan yang sedang disusun (harus termasuk tahun anggaran ini); bawaannya tahapan konteks.
+  const vid = tahap && (await loadStageVersions(sb, ctx.yearId)).some((v) => v.id === tahap) ? tahap : ctx.versionId;
+  const { entries } = await loadCashEntries(sb, vid);
   const wb = new ExcelJS.Workbook(); wb.creator = "SIPANDABAJA";
   const ws = wb.addWorksheet("Anggaran Kas");
   ws.addRow([...CASH_TEMPLATE_COLUMNS]);

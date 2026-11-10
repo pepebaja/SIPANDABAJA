@@ -17,7 +17,7 @@ type Sub = { key: string; code: string; name: string; rows: GridEntry[] };
 type Act = { key: string; code: string; name: string; subs: Sub[]; rows: GridEntry[] };
 type Prog = { key: string; code: string; name: string; acts: Act[]; rows: GridEntry[] };
 
-export function CashGrid({ entries, canEdit }: { entries: GridEntry[]; canEdit: boolean }) {
+export function CashGrid({ entries, canEdit, versionId }: { entries: GridEntry[]; canEdit: boolean; versionId: string }) {
   const [vals, setVals] = useState<Record<string, string[]>>(() => Object.fromEntries(entries.map((e) => [e.id, e.q.map(fmt)])));
   const [base, setBase] = useState<Record<string, (string | null)[]>>(() => Object.fromEntries(entries.map((e) => [e.id, e.q])));
   const [search, setSearch] = useState(""), [prog, setProg] = useState("");
@@ -61,7 +61,7 @@ export function CashGrid({ entries, canEdit }: { entries: GridEntry[]; canEdit: 
     if (invalidCount) { setMsg({ error: `${invalidCount} baris berisi angka tidak valid (ditandai merah).` }); return; }
     const changes = dirtyIds.map((id) => ({ entryId: id, q: cur[id]!.map((v) => (v === "invalid" ? null : v)) }));
     start(async () => {
-      const r = await saveCashGrid(changes);
+      const r = await saveCashGrid(changes, versionId);
       if (r.ok) { setBase((p) => ({ ...p, ...Object.fromEntries(dirtyIds.map((id) => [id, cur[id]!.map((v) => (v === "invalid" ? null : v))])) })); setMsg({ ok: `Tersimpan: ${r.saved} baris.` }); }
       else setMsg({ error: r.error });
     });

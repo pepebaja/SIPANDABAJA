@@ -6,7 +6,7 @@ import { QUARTER_SHORT } from "@/lib/cash";
 import { Icon } from "@/components/icons";
 
 const m = (v: string | null) => (v === null ? "-" : formatRupiah(v).replace(/^(-?)Rp /, "$1"));
-export function CashUpload() {
+export function CashUpload({ versionId }: { versionId: string }) {
   const [s, stage, staging] = useActionState<CashImportState, FormData>(stageCashImport, {});
   const [c, confirm, confirming] = useActionState<CashImportState, FormData>(confirmCashImport, {});
   return (
@@ -16,7 +16,7 @@ export function CashUpload() {
           <p className="mt-1 max-w-3xl text-sm text-slate-600">Sistem mencocokkan baris dengan rekening anggaran lewat kode sub kegiatan dan kode rekening, lalu menampilkan pratinjau. <b>Tidak ada yang tersimpan sebelum Anda menekan Terapkan.</b></p></div>
         <a href="/api/templates/kas" className="btn btn-ghost btn-sm"><Icon name="download" className="h-4 w-4" />Unduh template Excel</a>
       </div>
-      <form action={stage} className="flex flex-wrap items-end gap-3">
+      <form action={stage} className="flex flex-wrap items-end gap-3"><input type="hidden" name="version_id" value={versionId} />
         <label className="field-label">File (.xlsx atau .pdf, maks. 5 MB)<input name="file" type="file" accept=".xlsx,.pdf" required className="mt-1 block text-sm" /></label>
         <button disabled={staging} className="btn btn-primary">{staging ? "Memeriksa..." : "Periksa file"}</button>
       </form>

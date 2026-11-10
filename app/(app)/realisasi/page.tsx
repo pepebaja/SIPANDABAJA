@@ -33,9 +33,9 @@ const pill = (on: boolean) => `rounded-full border px-4 py-1.5 text-sm font-semi
 const Skeleton = ({ h = "h-40" }: { h?: string }) => <div className={`card ${h} animate-pulse bg-slate-100`} role="status" aria-label="Memuat" />;
 
 // ---------- tab: input manual (memuat seluruh rekening/RUP/paket; di-stream) ----------
-async function ManualTab({ sb, vid, year }: { sb: SupabaseClient; vid: string; year: number }) {
-  const form = await loadRealizationForm(sb, vid);
-  return form.entries.length ? <TransactionForm year={year} entries={form.entries} rups={form.rups} methods={form.methods} providers={form.providers} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} />
+async function ManualTab({ sb, vid, yearId, year }: { sb: SupabaseClient; vid: string; yearId: string; year: number }) {
+  const form = await loadRealizationForm(sb, vid, yearId, year);
+  return form.entries.length ? <TransactionForm year={year} entries={form.entries} rups={form.rups} methods={form.methods} providers={form.providers} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} windows={form.windows} stageData={form.stageData} currentStageId={form.currentStageId} />
     : <p className="alert alert-warn">Belum ada rekening anggaran. Impor anggaran lebih dulu.</p>;
 }
 
@@ -184,7 +184,7 @@ export default async function RealisasiPage({ searchParams }: { searchParams: Pr
         <p className="text-sm text-slate-600">Catat, kontrol, dan perbaiki realisasi di satu tempat. Data yang sudah masuk dapat diubah atau dihapus kapan saja lewat tombol <b>Ubah</b> pada Daftar.</p></div>
       <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-3" aria-label="Menu Input Realisasi">{tabs.map(([k, l]) => <Link key={k} href={`/realisasi?tab=${k}`} className={pill(k === tab)} aria-current={k === tab ? "page" : undefined}>{l}</Link>)}</nav>
       {tab === "unggah" && <Suspense fallback={<Skeleton h="h-72" />}><UnggahTab sb={sb} yearId={ctx.yearId} year={ctx.year} canSetStage={canAdmin} /></Suspense>}
-      {tab === "manual" && <Suspense fallback={<Skeleton />}><ManualTab sb={sb} vid={vid} year={ctx.year} /></Suspense>}
+      {tab === "manual" && <Suspense fallback={<Skeleton />}><ManualTab sb={sb} vid={vid} yearId={ctx.yearId} year={ctx.year} /></Suspense>}
       {tab === "daftar" && <Suspense fallback={<Skeleton h="h-72" />}><DaftarTab sb={sb} vid={vid} yearId={ctx.yearId} year={ctx.year} sp={sp} canWrite={canWrite} summary={summary} /></Suspense>}
       {tab === "riwayat" && <Suspense fallback={<Skeleton h="h-72" />}><RiwayatTab sb={sb} canAdmin={canAdmin} year={ctx.year} reset={sp.reset} /></Suspense>}
     </section>);

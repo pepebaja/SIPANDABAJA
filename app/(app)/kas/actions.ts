@@ -23,11 +23,19 @@ async function ensurePlan(sb: Awaited<ReturnType<typeof createClient>>, versionI
   return r.data?.id ?? null;
 }
 
+/** Tahapan (versi) yang disusun kasnya: dari formulir (version_id) bila sah dan termasuk tahun anggaran ini, jika tidak tahapan konteks. */
+async function targetVersion(sb: Awaited<ReturnType<typeof createClient>>, ctx: { versionId: string | null; yearId: string }, requested?: string | null): Promise<string | null> {
+  if (!requested || requested === ctx.versionId) return ctx.versionId;
+  if (!UUID.test(requested)) return null;
+  return (await loadStageVersions(sb, ctx.yearId)).some((v) => v.id === requested) ? requested : null;
+}
+
 // ---------- input manual ----------
 export type GridState = { ok?: boolean; error?: string; saved?: number };
-export async function saveCashGrid(changes: { entryId: string; q: (string | null)[] }[]): Promise<GridState> {
+export async function saveCashGrid(changes: { entryId: string; q: (string | null)[] }[], versionId?: string): Promise<GridState> {
   const s = await getSession(); if (!s || !can(s.roles, "cash:write")) return { error: DENIED };
   const ctx = await getBudgetContext(); if (!ctx?.versionId) return { error: "Versi anggaran belum disiapkan." };
+  const sb0 = await createClient(), vid = await targetVersion(sb0, ctx, versionId); if (!vid) return { error: "Tahapan anggaran tidak valid untuk tahun ini." };
   if (!Array.isArray(changes) || !changes.length) return { error: "Tidak ada perubahan." };
   if (changes.length > MAX_ROWS) return { error: `Maksimal ${MAX_ROWS} baris per penyimpanan.` };
   const parsed: { id: string; q: Quarters }[] = [];
@@ -41,10 +49,10 @@ export async function saveCashGrid(changes: { entryId: string; q: (string | null
   const sb = await createClient();
   const ids = [...new Set(parsed.map((p) => p.id))];
   for (let i = 0; i < ids.length; i += 200) {
-    const { data } = await sb.from("budget_entries").select("id").eq("budget_version_id", ctx.versionId).in("id", ids.slice(i, i + 200));
+    const { data } = await sb.from("budget_entries").select("id").eq("budget_version_id", vid).in("id", ids.slice(i, i + 200));
     if ((data?.length ?? 0) !== ids.slice(i, i + 200).length) return { error: "Ada rekening yang bukan bagian dari tahun/tahapan ini. Muat ulang halaman." };
   }
-  const planId = await ensurePlan(sb, ctx.versionId); if (!planId) return { error: DENIED };
+  const planId = await ensurePlan(sb, vid); if (!planId) return { error: DENIED };
   const upserts = parsed.flatMap((p) => p.q.map((v, i) => (v === null ? null : { cash_plan_id: planId, budget_entry_id: p.id, period_quarter: i + 1, planned_amount: v })).filter((x) => x !== null));
   for (let i = 0; i < upserts.length; i += 500) {
     const { error } = await sb.from("cash_plan_items").upsert(upserts.slice(i, i + 500), { onConflict: "cash_plan_id,budget_entry_id,period_quarter" });
@@ -69,6 +77,7 @@ export type CashImportState = {
 export async function stageCashImport(_p: CashImportState, fd: FormData): Promise<CashImportState> {
   const s = await getSession(); if (!s || !can(s.roles, "cash:write")) return { error: DENIED };
   const ctx = await getBudgetContext(); if (!ctx?.versionId) return { error: "Versi anggaran untuk tahun/tahapan ini belum disiapkan." };
+  const sb0 = await createClient(), vid = await targetVersion(sb0, ctx, String(fd.get("version_id") ?? "")); if (!vid) return { error: "Tahapan anggaran tidak valid untuk tahun ini." };
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Pilih file .xlsx atau .pdf terlebih dahulu." };
   const name = file.name.toLowerCase(), kind = name.endsWith(".xlsx") ? "xlsx" : name.endsWith(".pdf") ? "pdf" : null;
@@ -79,7 +88,7 @@ export async function stageCashImport(_p: CashImportState, fd: FormData): Promis
   if (kind === "pdf" && String.fromCharCode(...bytes.slice(0, 4)) !== "%PDF") return { error: "Isi file bukan PDF yang valid." };
 
   const sb = await createClient();
-  const { entries } = await loadCashEntries(sb, ctx.versionId);
+  const { entries } = await loadCashEntries(sb, vid);
   if (!entries.length) return { error: "Belum ada rekening anggaran. Impor anggaran lebih dulu di menu Impor anggaran." };
   const idx = buildEntryIndex(toEntryRefs(entries));
   let result: CashParse, total: number;
@@ -96,7 +105,7 @@ export async function stageCashImport(_p: CashImportState, fd: FormData): Promis
   if (!result.valid.length && !result.errors.length) return { error: kind === "pdf" ? "Tidak ada baris yang dikenali. Pastikan PDF memuat kode subkegiatan dan kode rekening yang sama dengan anggaran, atau gunakan template Excel." : "Tidak ada baris dengan nilai triwulan. Isi kolom tw1-tw4 pada template." };
 
   const checksum = sha256(bytes);
-  const { data: existing } = await sb.from("import_jobs").select("id").eq("kind", "cash_plans").eq("budget_version_id", ctx.versionId).eq("checksum", checksum).maybeSingle();
+  const { data: existing } = await sb.from("import_jobs").select("id").eq("kind", "cash_plans").eq("budget_version_id", vid).eq("checksum", checksum).maybeSingle();
   const payload = { file_name: file.name.slice(0, 200), total_rows: total, ok_rows: result.valid.length, error_rows: new Set(result.errors.map((e) => e.row)).size, staged_rows: result.valid, status: "staged", confirmed_by: null, confirmed_at: null };
   let jobId = existing?.id as string | undefined;
   if (jobId) {
@@ -104,7 +113,7 @@ export async function stageCashImport(_p: CashImportState, fd: FormData): Promis
     const { error } = await sb.from("import_jobs").update(payload).eq("id", jobId);
     if (error) return { error: "Gagal menyimpan hasil pemeriksaan. Anda mungkin tidak berwenang." };
   } else {
-    const { data, error } = await sb.from("import_jobs").insert({ ...payload, kind: "cash_plans", budget_version_id: ctx.versionId, checksum }).select("id").single();
+    const { data, error } = await sb.from("import_jobs").insert({ ...payload, kind: "cash_plans", budget_version_id: vid, checksum }).select("id").single();
     if (error || !data) return { error: "Gagal menyimpan hasil pemeriksaan. Anda mungkin tidak berwenang." };
     jobId = data.id;
   }
@@ -131,15 +140,16 @@ export type CopyState = { error?: string; ok?: boolean; from?: string; copied?: 
 export async function copyCashFromPrevious(_p: CopyState, fd: FormData): Promise<CopyState> {
   const s = await getSession(); if (!s || !can(s.roles, "cash:write")) return { error: DENIED };
   const ctx = await getBudgetContext(); if (!ctx?.versionId) return { error: "Versi anggaran untuk tahun/tahapan ini belum disiapkan." };
+  const sb0 = await createClient(), vid = await targetVersion(sb0, ctx, String(fd.get("version_id") ?? "")); if (!vid) return { error: "Tahapan anggaran tidak valid untuk tahun ini." };
   const overwrite = fd.get("overwrite") === "on", sb = await createClient();
-  const versions = await loadStageVersions(sb, ctx.yearId), cur = versions.find((v) => v.id === ctx.versionId);
+  const versions = await loadStageVersions(sb, ctx.yearId), cur = versions.find((v) => v.id === vid);
   if (!cur) return { error: "Versi anggaran aktif tidak ditemukan." };
   const earlier = versions.filter((v) => v.sortOrder < cur.sortOrder || (v.sortOrder === cur.sortOrder && v.versionNo < cur.versionNo)).reverse();
   if (!earlier.length) return { error: "Tahapan ini adalah tahapan pertama; tidak ada tahapan sebelumnya untuk disalin." };
   let src: (typeof earlier)[number] | null = null, srcLoaded: Awaited<ReturnType<typeof loadCashEntries>> | null = null;
   for (const v of earlier) { const l = await loadCashEntries(sb, v.id); if (l.entries.some((e) => e.q.some((x) => x !== null))) { src = v; srcLoaded = l; break; } }
   if (!src || !srcLoaded) return { error: "Tahapan sebelumnya belum memiliki anggaran kas yang dapat disalin." };
-  const dst = await loadCashEntries(sb, ctx.versionId);
+  const dst = await loadCashEntries(sb, vid);
   if (!dst.entries.length) return { error: "Belum ada rekening anggaran pada tahapan ini. Impor anggaran tahapan ini lebih dulu." };
   const idx = buildEntryIndex(toEntryRefs(dst.entries)), byId = new Map(dst.entries.map((e) => [e.id, e])), covered = new Set<string>();
   const put = new Map<string, Quarters>(), missingList: string[] = []; let kept = 0, missing = 0;
@@ -152,7 +162,7 @@ export async function copyCashFromPrevious(_p: CopyState, fd: FormData): Promise
     if (!overwrite && t.q.some((x) => x !== null)) { kept++; continue; }
     put.set(r.entry.id, e.q);
   }
-  const planId = await ensurePlan(sb, ctx.versionId); if (!planId) return { error: DENIED };
+  const planId = await ensurePlan(sb, vid); if (!planId) return { error: DENIED };
   const upserts = [...put].flatMap(([id, q]) => q.map((v, i) => (v === null ? null : { cash_plan_id: planId, budget_entry_id: id, period_quarter: i + 1, planned_amount: v })).filter((x) => x !== null));
   for (let i = 0; i < upserts.length; i += 500) {
     const { error } = await sb.from("cash_plan_items").upsert(upserts.slice(i, i + 500), { onConflict: "cash_plan_id,budget_entry_id,period_quarter" });

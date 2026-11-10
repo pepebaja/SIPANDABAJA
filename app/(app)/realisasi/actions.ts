@@ -10,6 +10,7 @@ import { parseRupiah } from "@/lib/import/parse";
 import { toCents } from "@/lib/money";
 import { transactionSaveSchema, transactionSchema } from "@/lib/transactions";
 import { referenceDate, resolveVersion } from "@/lib/stage-rule";
+import { mapEntryToVersion } from "@/lib/server/stage-map";
 import type { FormState } from "../master/actions";
 
 const MIGRASI = "Migrasi database 20260113 (realisasi sederhana) belum dijalankan di Supabase.";
@@ -20,12 +21,25 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   const parsed = transactionSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)])));
   if (!parsed.success) return { error: parsed.error.issues.map((i) => i.message).join("; ") };
   const d = parsed.data, sb = await createClient();
-  // Tahapan ditentukan oleh tanggal (SPM/SP2D, atau transaksi bila belum ada). Pencatatan manual hanya untuk tahapan yang sedang dipilih.
+  // Tahapan ditentukan tanggal penetapan tahapan terhadap tanggal acuan (SPM/SP2D, atau tanggal transaksi bila belum ada), BUKAN tahapan yang
+  // sedang dipilih di layar. Contoh: SPM 5 Okt 2026 = tahapan Pergeseran (triwulan IV) walaupun layar sedang memakai tahapan Perubahan.
   const ref = referenceDate({ transactionDate: d.transaction_date, paymentDate: d.payment_date }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
-  if (!ver) return { error: `Tidak ada tahapan anggaran yang berlaku pada ${ref.date}. Atur tanggal mulai berlaku tahapan di tab Unggah (panel Aturan tahapan anggaran).` };
-  if (ver.id !== ctx.versionId) return { error: `Tanggal ${ref.date} termasuk tahapan ${ver.stageName}. Pilih tahapan ${ver.stageName} di bagian atas layar, atau periksa kembali tanggal SPM/SP2D.` };
-  let dup = sb.from("transactions").select("id", { count: "exact", head: true }).eq("budget_version_id", ctx.versionId).eq("budget_entry_id", d.budget_entry_id).eq("transaction_date", d.transaction_date).eq("amount", d.amount);
-  dup = d.rup_package_id ? dup.eq("rup_package_id", d.rup_package_id) : dup.is("rup_package_id", null);
+  if (!ver) return { error: `Tidak ada tahapan anggaran yang berlaku pada ${ref.date}. Atur tanggal penetapan tahapan di tab Unggah (panel Aturan tahapan anggaran).` };
+  if (Number(d.transaction_date.slice(0, 4)) !== ctx.year || Number(ref.date.slice(0, 4)) !== ctx.year) return { error: `Tanggal harus berada pada tahun anggaran ${ctx.year}.` };
+  let entryId = d.budget_entry_id, rupId = d.rup_package_id;
+  if (ver.id !== ctx.versionId) {
+    // Rekening dan paket RUP dipilih dari tahapan layar; dipetakan ke padanannya pada tahapan menurut tanggal.
+    const me = await mapEntryToVersion(sb, d.budget_entry_id, ver.id); if ("error" in me) return { error: `Tanggal ${ref.date} termasuk tahapan ${ver.stageName}. ${me.error}` };
+    entryId = me.id;
+    if (d.rup_package_id) {
+      const { data: src } = await sb.from("rup_packages").select("rup_code").eq("id", d.rup_package_id).maybeSingle();
+      const { data: dst } = src ? await sb.from("rup_packages").select("id").eq("budget_version_id", ver.id).eq("rup_code", src.rup_code).maybeSingle() : { data: null };
+      if (!dst) return { error: `Tanggal ${ref.date} termasuk tahapan ${ver.stageName}, tetapi kode RUP ${src?.rup_code ?? ""} belum ada pada tahapan itu. Sinkronkan RUP tahapan ${ver.stageName} (menu Paket RUP) atau pilih tanggal lain.` };
+      rupId = dst.id;
+    }
+  }
+  let dup = sb.from("transactions").select("id", { count: "exact", head: true }).eq("budget_version_id", ver.id).eq("budget_entry_id", entryId).eq("transaction_date", d.transaction_date).eq("amount", d.amount);
+  dup = rupId ? dup.eq("rup_package_id", rupId) : dup.is("rup_package_id", null);
   if (((await dup).count ?? 0) > 0) return { error: "Transaksi dengan tanggal, rekening, kode RUP, dan nilai yang sama sudah tercatat. Untuk melengkapi No SPM/SP2D, ubah lewat Daftar transaksi atau unggah ulang." };
   // Penyedia: pilih dari master, atau ketik nama baru (dicocokkan tanpa membedakan huruf/spasi/tanda baca agar tidak dobel).
   const { new_provider_name, ...row } = d; let providerId = row.provider_id;
@@ -35,7 +49,7 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
     if (r.error) return { error: r.error.code === "P0001" ? r.error.message : r.error.code === "42883" ? "Migrasi database 20260119 (penyedia pada transaksi) belum dijalankan di Supabase." : "Penyedia baru gagal disimpan. Anda mungkin tidak berwenang." };
     providerId = r.data as string;
   }
-  const { error } = await sb.from("transactions").insert({ ...row, provider_id: providerId, budget_version_id: ctx.versionId });
+  const { error } = await sb.from("transactions").insert({ ...row, budget_entry_id: entryId, rup_package_id: rupId, provider_id: providerId, budget_version_id: ver.id });
   if (error?.code === "P0001") return { error: error.message };
   if (error?.code === "23502" || error?.code === "42703" || error?.message?.includes("schema cache")) return { error: MIGRASI };
   if (error) return { error: "Gagal menyimpan. Anda mungkin tidak berwenang mencatat realisasi." };
