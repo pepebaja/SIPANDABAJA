@@ -6,7 +6,9 @@ import { getBudgetContext } from "@/lib/server/budget-context";
 import { getSession } from "@/lib/server/session";
 import { loadStageVersions } from "@/lib/server/stage-versions";
 import { can } from "@/lib/rbac";
-import { transactionEditSchema, transactionSchema } from "@/lib/transactions";
+import { parseRupiah } from "@/lib/import/parse";
+import { toCents } from "@/lib/money";
+import { transactionSaveSchema, transactionSchema } from "@/lib/transactions";
 import { referenceDate, resolveVersion } from "@/lib/stage-rule";
 import type { FormState } from "../master/actions";
 
@@ -40,67 +42,71 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   revalidatePath("/realisasi"); revalidatePath("/rup");
   return { ok: true };
 }
-/** Kembali ke Daftar transaksi dengan filter & halaman yang sama (parameter `back` dari formulir; hanya karakter aman). */
-const back = (fd: FormData): string => { const b = String(fd.get("back") ?? ""); return /^tab=daftar(&[a-z]+=[0-9a-zA-Z_%.\-]*)*$/.test(b) ? `/realisasi?${b}` : "/realisasi?tab=daftar"; };
+const NO_AUTH = "Anda tidak berwenang mengubah realisasi (hanya Super Admin, Admin OPD, dan PPBJ).";
 /**
- * Mengubah satu transaksi langsung di aplikasi: tanggal transaksi, nilai, catatan, Tanggal & No SPM/SP2D, dan Kode RUP (semua boleh menyusul).
+ * Menyimpan perubahan satu transaksi dari dialog "Ubah" (hasil dan galat ditampilkan di dalam dialog, filter/halaman daftar tidak hilang).
  * Tidak ada verifikasi: perubahan langsung berlaku. Tahapan mengikuti tanggal SPM/SP2D (atau tanggal transaksi bila belum ada):
  * Murni < 16 Mar; Pergeseran 16 Mar - 26 Okt; Perubahan 27 Okt - 31 Des (dapat diatur admin). Bila tanggal pindah tahapan, transaksi
  * otomatis dipindah ke rekening/RUP padanannya di tahapan itu. Batas pagu/kas ditegakkan trigger database.
  */
-export async function updateTransaction(fd: FormData): Promise<void> {
-  const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect(`${back(fd)}&error=payment`);
-  const p = transactionEditSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) redirect(`${back(fd)}&error=payment`);
-  const sb = await createClient(), { id, payment_number, payment_date, rup_code, method_id, provider_id, transaction_date, amount, notes } = p.data;
-  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, transaction_date, payment_date, payment_number").eq("id", id).maybeSingle();
-  if (!row) redirect(`${back(fd)}&error=payment`);
-  const patch: Record<string, unknown> = {};
-  if (payment_number !== null) patch.payment_number = payment_number; if (payment_date !== null) patch.payment_date = payment_date;
-  if (transaction_date !== null) patch.transaction_date = transaction_date; if (amount !== null) patch.amount = amount; if (notes !== undefined) patch.notes = notes || null;
-  const ctx = await getBudgetContext(); let targetVid: string = row.budget_version_id as string;
-  const newTx = (transaction_date ?? row.transaction_date) as string, newPay = (payment_date ?? row.payment_date) as string | null;
-  if (ctx && (payment_date !== null || transaction_date !== null)) {
-    if (Number(newTx.slice(0, 4)) !== ctx.year || (newPay && Number(newPay.slice(0, 4)) !== ctx.year)) redirect(`${back(fd)}&error=year`);
-    const ref = referenceDate({ transactionDate: newTx, paymentDate: newPay }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
-    if (!ver) redirect(`${back(fd)}&error=stage`);
+export async function saveTransaction(_p: FormState, fd: FormData): Promise<FormState> {
+  const s = await getSession(); if (!s || !can(s.roles, "realization:write")) return { error: NO_AUTH };
+  const p = transactionSaveSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) return { error: p.error.issues.map((i) => i.message).join("; ") };
+  const d = p.data, sb = await createClient(), ctx = await getBudgetContext(); if (!ctx) return { error: "Konteks anggaran belum dipilih." };
+  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, provider_id, transaction_date, amount, payment_date, payment_number, notes").eq("id", d.id).maybeSingle();
+  if (!row) return { error: "Transaksi tidak ditemukan atau sudah dihapus. Muat ulang halaman." };
+  const patch: Record<string, unknown> = {}, same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null);
+  if (!same(d.transaction_date, row.transaction_date)) patch.transaction_date = d.transaction_date;
+  if (toCents(parseRupiah(row.amount) ?? "0") !== toCents(d.amount)) patch.amount = d.amount;
+  if (!same(d.payment_date, row.payment_date)) patch.payment_date = d.payment_date;
+  if (!same(d.payment_number, row.payment_number)) patch.payment_number = d.payment_number;
+  if (!same(d.notes, row.notes)) patch.notes = d.notes;
+  if (!same(d.provider_id, row.provider_id)) patch.provider_id = d.provider_id;
+  let targetVid = row.budget_version_id as string;
+  if ("transaction_date" in patch || "payment_date" in patch) {
+    if (Number(d.transaction_date.slice(0, 4)) !== ctx.year || (d.payment_date && Number(d.payment_date.slice(0, 4)) !== ctx.year)) return { error: `Tanggal harus berada pada tahun anggaran ${ctx.year}.` };
+    const ref = referenceDate({ transactionDate: d.transaction_date, paymentDate: d.payment_date }), ver = resolveVersion(await loadStageVersions(sb, ctx.yearId), ctx.year, ref.date);
+    if (!ver) return { error: "Tidak ada tahapan anggaran yang berlaku pada tanggal itu. Periksa panel Aturan tahapan anggaran (tab Unggah)." };
     if (ver.id !== row.budget_version_id) {
-      // Pindah tahapan: cari rekening padanan (subkegiatan + rekening + sumber dana + uraian) dan RUP berkode sama pada tahapan tujuan.
+      // Pindah tahapan: cari rekening padanan (subkegiatan + rekening + sumber dana + uraian) pada tahapan tujuan.
+      const noMove = { error: `Tanggal itu memindahkan transaksi ke tahapan ${ver.stageName}, tetapi rekening (subkegiatan + rekening + sumber dana) atau kode RUP padanannya tidak ditemukan/tidak unik di sana. Tambahkan/impor rekening itu pada tahapan tujuan (menu Kelola anggaran) lebih dulu.` };
       const { data: cur } = await sb.from("budget_entries").select("subactivity_id, account_id, funding_source_id, description").eq("id", row.budget_entry_id).maybeSingle();
-      if (!cur) redirect(`${back(fd)}&error=move`);
+      if (!cur) return noMove;
       let q = sb.from("budget_entries").select("id, description").eq("budget_version_id", ver.id).eq("subactivity_id", cur.subactivity_id).eq("account_id", cur.account_id);
       q = cur.funding_source_id ? q.eq("funding_source_id", cur.funding_source_id) : q.is("funding_source_id", null);
       const { data: cands } = await q; let pick = cands ?? [];
-      if (pick.length > 1) { const same = pick.filter((e) => e.description === cur.description); if (same.length) pick = same; }
-      if (pick.length !== 1) redirect(`${back(fd)}&error=move`);
+      if (pick.length > 1) { const same2 = pick.filter((e) => e.description === cur.description); if (same2.length) pick = same2; }
+      if (pick.length !== 1) return noMove;
       patch.budget_version_id = ver.id; patch.budget_entry_id = pick[0]!.id; targetVid = ver.id;
-      if (row.rup_package_id && !rup_code) {
-        const { data: old } = await sb.from("rup_packages").select("rup_code").eq("id", row.rup_package_id).maybeSingle();
-        const { data: nw } = old ? await sb.from("rup_packages").select("id").eq("budget_version_id", ver.id).eq("rup_code", old.rup_code).maybeSingle() : { data: null };
-        if (!nw) redirect(`${back(fd)}&error=move`);
-        patch.rup_package_id = nw.id;
-      }
     }
   }
-  // Kode RUP boleh menyusul/diubah: harus ada pada arsip RUP tahapan transaksi.
-  if (rup_code) {
-    const code = rup_code.replace(/\.0+$/, "");
-    const { data: rp } = await sb.from("rup_packages").select("id, planned_method_id").eq("budget_version_id", targetVid).eq("rup_code", code).maybeSingle();
-    if (!rp) redirect(`${back(fd)}&error=rup`);
-    patch.rup_package_id = rp.id; if (!row.procurement_method_id && rp.planned_method_id) patch.procurement_method_id = rp.planned_method_id;
-  }
-  if (provider_id) patch.provider_id = provider_id;
-  if (method_id) patch.procurement_method_id = method_id;   // metode pemilihan eksplisit dari formulir menggantikan metode bawaan RUP
-  if (Object.keys(patch).length) { const { error } = await sb.from("transactions").update(patch).eq("id", id); if (error) redirect(`${back(fd)}&error=${error.code === "P0001" ? "limit" : "payment"}&msg=${encodeURIComponent(error.code === "P0001" ? error.message.slice(0, 200) : "")}`); }
+  // Kode RUP & metode: RUP harus ada pada arsip RUP tahapan transaksi; metode kosong + RUP berencana metode -> mengikuti rencana RUP.
+  let wantMethod = d.method_id;
+  if (d.rup_code) {
+    const { data: rp } = await sb.from("rup_packages").select("id, planned_method_id").eq("budget_version_id", targetVid).eq("rup_code", d.rup_code.replace(/\.0+$/, "")).maybeSingle();
+    if (!rp) return { error: "Kode RUP tidak ditemukan pada tahapan transaksi ini. Sinkronkan RUP tahapan tersebut (menu Paket RUP), periksa kodenya, atau kosongkan." };
+    if (rp.id !== row.rup_package_id) patch.rup_package_id = rp.id;
+    wantMethod = wantMethod ?? rp.planned_method_id ?? null;
+  } else if (row.rup_package_id) patch.rup_package_id = null;
+  if (!same(wantMethod, row.procurement_method_id)) patch.procurement_method_id = wantMethod;
+  if (d.provider_id) { const { data: pv } = await sb.from("providers").select("is_active").eq("id", d.provider_id).maybeSingle(); if (!pv?.is_active && d.provider_id !== row.provider_id) return { error: "Penyedia yang dipilih tidak ditemukan atau nonaktif." }; }
+  if (!Object.keys(patch).length) return { ok: true };
+  const { error } = await sb.from("transactions").update(patch).eq("id", d.id);
+  if (error?.code === "P0001") return { error: error.message };
+  if (error && (error.code === "42703" || error.message?.includes("schema cache"))) return { error: "Migrasi database 20260119 (penyedia pada transaksi) belum dijalankan di Supabase." };
+  if (error) return { error: "Perubahan ditolak. Periksa isian dan hak akses Anda." };
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
+  return { ok: true };
 }
 
 /** Menghapus satu transaksi (jejak tetap ada di Log audit). Dapat dilakukan Super Admin, Admin OPD, dan PPBJ. */
-export async function deleteTransaction(fd: FormData): Promise<void> {
-  const s = await getSession(); if (!s || !can(s.roles, "realization:write")) redirect(`${back(fd)}&error=payment`);
-  const id = String(fd.get("id") ?? ""); if (!/^[0-9a-f-]{36}$/i.test(id)) redirect("/realisasi?tab=daftar");
+export async function removeTransaction(_p: FormState, fd: FormData): Promise<FormState> {
+  const s = await getSession(); if (!s || !can(s.roles, "realization:write")) return { error: NO_AUTH };
+  const id = String(fd.get("id") ?? ""); if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Transaksi tidak valid." };
   const { data, error } = await (await createClient()).from("transactions").delete().eq("id", id).select("id");
-  if (error || !data?.length) redirect(`${back(fd)}&error=delete`);
+  if (error || !data?.length) return { error: "Transaksi tidak dapat dihapus. Anda mungkin tidak berwenang atau data sudah terhapus." };
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
+  return { ok: true };
 }
 
 /**

@@ -34,16 +34,17 @@ export function RealizationFilter({ programs, activities, subs, value, active }:
           <select name="basis" defaultValue={value.basis} className="mt-1 w-full"><option value="transaksi">Tanggal transaksi</option><option value="spm">Tanggal SPM/SP2D</option></select></label>
         <label className={lbl}>Dari tanggal<input type="date" name="dari" defaultValue={value.from} className="mt-1 w-full" /></label>
         <label className={lbl}>Sampai tanggal<input type="date" name="sampai" defaultValue={value.to} className="mt-1 w-full" /></label>
-        <label className={lbl}>Kontrol data
+        <label className={lbl}>Kontrol kelengkapan data
           <select name="cek" defaultValue={value.cek} className="mt-1 w-full">{CEK_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
       </div>
-      <div className="grid gap-3 md:grid-cols-4">
-        <label className={lbl}>Pengakuan
-          <select name="pay" defaultValue={value.pay} className="mt-1 w-full"><option value="">Semua</option><option value="sudah">Diakui (ada tanggal SPM/SP2D)</option><option value="belum">belum_spm_sp2d</option></select></label>
-        <label className={lbl}>Proses
-          <select name="proses" defaultValue={value.proses} className="mt-1 w-full"><option value="">Semua</option><option value="pengadaan">Pengadaan</option><option value="non">Non-pengadaan</option></select></label>
-        <div className="flex items-end gap-2 md:col-span-2"><button className="btn btn-dark btn-sm">Terapkan filter</button>
-          {active && <Link href="/realisasi?tab=daftar" className="btn btn-ghost btn-sm">Reset filter</Link>}</div>
-      </div>
+      <details className="text-sm" open={!!(value.pay || value.proses)}><summary className="cursor-pointer font-medium text-slate-700">Filter lainnya (pengakuan, proses)</summary>
+        <div className="mt-2 grid gap-3 md:grid-cols-4">
+          <label className={lbl}>Pengakuan
+            <select name="pay" defaultValue={value.pay} className="mt-1 w-full"><option value="">Semua</option><option value="sudah">Sudah diakui (ada tanggal SPM/SP2D)</option><option value="belum">Belum diakui (belum ada tanggal)</option></select></label>
+          <label className={lbl}>Proses
+            <select name="proses" defaultValue={value.proses} className="mt-1 w-full"><option value="">Semua</option><option value="pengadaan">Pengadaan</option><option value="non">Non-pengadaan</option></select></label></div></details>
+      <div className="flex flex-wrap items-center gap-2"><button className="btn btn-dark btn-sm">Terapkan filter</button>
+        {active && <Link href="/realisasi?tab=daftar" className="btn btn-ghost btn-sm">Reset filter</Link>}
+        {active && <span className="text-xs text-slate-600">Filter aktif: ringkasan dan daftar di bawah mengikuti pilihan ini.</span>}</div>
     </form>);
 }
