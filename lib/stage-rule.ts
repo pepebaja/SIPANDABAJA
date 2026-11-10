@@ -31,12 +31,29 @@ export function latestPerStage(vs: StageVersion[]): StageVersion[] {
   for (const v of vs) { const c = m.get(v.stageCode); if (!c || v.versionNo > c.versionNo) m.set(v.stageCode, v); }
   return [...m.values()].sort((a, b) => a.sortOrder - b.sortOrder);
 }
-/** Tahapan berlaku pada tanggal acuan = tahapan dengan tanggal mulai terakhir yang <= tanggal acuan. Seri tanggal sama: urutan tahapan terbesar. */
+/**
+ * Tahapan berlaku pada tanggal acuan = versi dengan tanggal penetapan (mulai berlaku) terakhir yang <= tanggal acuan.
+ * SEMUA versi ikut dipertimbangkan (mis. Pergeseran I dan Pergeseran II dengan tanggal penetapan berbeda). Seri tanggal sama:
+ * urutan tahapan terbesar, lalu nomor versi terbesar.
+ */
 export function resolveVersion(vs: StageVersion[], year: number, refDate: string): StageVersion | null {
   let best: { v: StageVersion; start: string } | null = null;
-  for (const v of latestPerStage(vs)) {
+  for (const v of vs) {
     const start = effectiveStart(v, year); if (!start || start > refDate) continue;
-    if (!best || start > best.start || (start === best.start && v.sortOrder > best.v.sortOrder)) best = { v, start };
+    if (!best || start > best.start || (start === best.start && (v.sortOrder > best.v.sortOrder || (v.sortOrder === best.v.sortOrder && v.versionNo > best.v.versionNo)))) best = { v, start };
   }
   return best?.v ?? null;
+}
+/** Triwulan (1-4) dari tanggal ISO: I Jan-Mar, II Apr-Jun, III Jul-Sep, IV Okt-Des. Null bila format tanggal tidak sah. */
+export const quarterOf = (iso: string): 1 | 2 | 3 | 4 | null => { const m = /^\d{4}-(\d{2})-\d{2}$/.exec(iso); if (!m) return null; const mo = Number(m[1]); return mo >= 1 && mo <= 12 ? ((Math.floor((mo - 1) / 3) + 1) as 1 | 2 | 3 | 4) : null; };
+export const QUARTER_MONTHS = ["Januari - Maret", "April - Juni", "Juli - September", "Oktober - Desember"] as const;
+export type StageWindow = { id: string; code: string; name: string; versionNo: number; start: string; end: string };
+/** Jendela berlaku tiap versi pada satu tahun: mulai = tanggal penetapan, berakhir sehari sebelum penetapan versi berikutnya (terakhir: 31 Des). Untuk tampilan. */
+export function stageWindows(vs: StageVersion[], year: number): StageWindow[] {
+  const dated = vs.map((v) => ({ v, start: effectiveStart(v, year) })).filter((x): x is { v: StageVersion; start: string } => !!x.start)
+    .sort((a, b) => a.start.localeCompare(b.start) || a.v.sortOrder - b.v.sortOrder || a.v.versionNo - b.v.versionNo);
+  const dayBefore = (d: string) => new Date(Date.parse(`${d}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+  // Versi yang tanggalnya persis sama dengan versi berikutnya digantikan (tidak pernah terpilih): dilewati.
+  const live = dated.filter((x, i) => !dated[i + 1] || dated[i + 1]!.start !== x.start);
+  return live.map((x, i) => ({ id: x.v.id, code: x.v.stageCode, name: x.v.stageName, versionNo: x.v.versionNo, start: x.start, end: live[i + 1] ? dayBefore(live[i + 1]!.start) : `${year}-12-31` }));
 }
