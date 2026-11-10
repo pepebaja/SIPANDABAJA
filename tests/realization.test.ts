@@ -58,3 +58,23 @@ describe("cakupan filter rekening", () => {
     expect(c).toEqual([`eq:subactivities.activities.program_id,${id}`]); expect(hasScopeFilter(parseTxFilter({ cek: "koreksi" }))).toBe(false);
   });
 });
+
+import { inJenis, jenisOfCode, jenisOptions } from "@/lib/belanja";
+describe("filter belanja", () => {
+  const acc = "11111111-2222-3333-4444-555555555555";
+  it("jenis belanja diturunkan dari kode rekening (2 dan 3 segmen) dan berlabel", () => {
+    const o = jenisOptions(["5.1.02.01.01.0024", "5.1.02.01.01.0025", "5.2.02.05.01.0001", "5.1.01.01.01.0001"]);
+    expect(o.map((x) => x.prefix)).toEqual(["5.1", "5.1.01", "5.1.02", "5.2", "5.2.02"]);
+    expect(o.find((x) => x.prefix === "5.1.02")?.label).toBe("Belanja Barang dan Jasa");
+    expect(inJenis("5.1.02.01.01.0024", "5.1")).toBe(true); expect(inJenis("5.1.02.01.01.0024", "5.2")).toBe(false); expect(inJenis("5.1.02.01.01.0024", "")).toBe(true);
+    expect(jenisOfCode("5.1.02.01.01.0024")).toBe("5.1.02");
+  });
+  it("parameter jenis/rekening divalidasi; rekening lebih spesifik daripada jenis", () => {
+    expect(parseTxFilter({ jenis: "5.1.02", rekening: "x" })).toMatchObject({ jenis: "5.1.02", rekening: "" });
+    expect(parseTxFilter({ jenis: "' or 1=1" }).jenis).toBe("");
+    expect(txFilterParams(parseTxFilter({ jenis: "5.1", rekening: acc }))).toEqual({ jenis: "5.1", rekening: acc });
+    const calls: string[] = []; const q: any = new Proxy({}, { get: (_t, k: string) => (...a: unknown[]) => { calls.push(`${k}:${a.join(",")}`); return q; } });
+    applyTxFilter(q, parseTxFilter({ jenis: "5.1.02", rekening: acc })); expect(calls).toEqual([`eq:budget_entries.account_id,${acc}`]);
+    calls.length = 0; applyTxFilter(q, parseTxFilter({ jenis: "5.1.02" })); expect(calls).toEqual(["like:budget_entries.expenditure_accounts.code,5.1.02.%"]);
+  });
+});
