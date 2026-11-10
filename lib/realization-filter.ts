@@ -1,6 +1,6 @@
 /** Filter Daftar transaksi realisasi (program / kegiatan / sub kegiatan, tanggal, dan kontrol kelengkapan data). Murni: tanpa akses database. */
 export type Cek = "" | "tanpa_tgl" | "tanpa_no" | "tanpa_rup" | "tanpa_metode" | "tanpa_penyedia" | "koreksi";
-export type TxFilter = { program: string; kegiatan: string; sub: string; basis: "transaksi" | "spm"; from: string; to: string; pay: "" | "sudah" | "belum"; proses: "" | "pengadaan" | "non"; cek: Cek };
+export type TxFilter = { program: string; kegiatan: string; sub: string; jenis: string; rekening: string; basis: "transaksi" | "spm"; from: string; to: string; pay: "" | "sudah" | "belum"; proses: "" | "pengadaan" | "non"; cek: Cek };
 export const CEK_OPTIONS: [Cek, string][] = [["", "Semua data"], ["tanpa_tgl", "Belum ada tanggal SPM/SP2D"], ["tanpa_no", "Sudah bertanggal, No SPM/SP2D kosong"],
   ["tanpa_rup", "Pengadaan tanpa kode RUP"], ["tanpa_metode", "Berkode RUP, metode pemilihan kosong"], ["tanpa_penyedia", "Pengadaan, penyedia belum diisi"], ["koreksi", "Koreksi (nilai minus)"]];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -13,30 +13,34 @@ export function parseTxFilter(sp: FilterInput): TxFilter & { dateError: boolean 
   const pick = <T extends string>(v: string | undefined, ok: readonly T[], d: T): T => (ok.includes(v as T) ? (v as T) : d);
   let from = sp.dari && isIsoDate(sp.dari) ? sp.dari : "", to = sp.sampai && isIsoDate(sp.sampai) ? sp.sampai : "", dateError = false;
   if (from && to && from > to) { dateError = true; from = ""; to = ""; }
-  return { program: id(sp.program), kegiatan: id(sp.kegiatan), sub: id(sp.sub), basis: pick(sp.basis, ["transaksi", "spm"] as const, "transaksi"), from, to,
+  const jenis = sp.jenis && /^\d(\.\d{1,2}){1,2}$/.test(sp.jenis) ? sp.jenis : "";
+  return { program: id(sp.program), kegiatan: id(sp.kegiatan), sub: id(sp.sub), jenis, rekening: id(sp.rekening), basis: pick(sp.basis, ["transaksi", "spm"] as const, "transaksi"), from, to,
     pay: pick(sp.pay, ["", "sudah", "belum"] as const, ""), proses: pick(sp.proses, ["", "pengadaan", "non"] as const, ""),
     cek: pick(sp.cek, CEK_OPTIONS.map(([k]) => k), ""), dateError };
 }
 /** Parameter URL dari filter (hanya yang terisi); `basis` hanya ikut bila ada rentang tanggal. */
 export function txFilterParams(f: TxFilter): Record<string, string> {
-  const o: Record<string, string> = { program: f.program, kegiatan: f.kegiatan, sub: f.sub, dari: f.from, sampai: f.to, basis: f.from || f.to ? f.basis : "", pay: f.pay, proses: f.proses, cek: f.cek };
+  const o: Record<string, string> = { program: f.program, kegiatan: f.kegiatan, sub: f.sub, jenis: f.jenis, rekening: f.rekening, dari: f.from, sampai: f.to, basis: f.from || f.to ? f.basis : "", pay: f.pay, proses: f.proses, cek: f.cek };
   return Object.fromEntries(Object.entries(o).filter(([, v]) => v));
 }
 export const hasTxFilter = (f: TxFilter): boolean => Object.keys(txFilterParams(f)).length > 0;
-export const hasScopeFilter = (f: TxFilter): boolean => !!(f.sub || f.kegiatan || f.program);
+export const hasScopeFilter = (f: TxFilter): boolean => !!(f.sub || f.kegiatan || f.program || f.jenis || f.rekening);
 /** Filter program/kegiatan/sub kegiatan (paling spesifik menang). `prefix` = jalur relasi ke rekening anggaran ("budget_entries." untuk transaksi, "" untuk rekening itu sendiri). */
 export function applyScopeFilter<Q>(q0: Q, f: TxFilter, prefix = ""): Q {
-  const q: any = q0;
-  if (f.sub) return q.eq(`${prefix}subactivity_id`, f.sub);
-  if (f.kegiatan) return q.eq(`${prefix}subactivities.activity_id`, f.kegiatan);
-  if (f.program) return q.eq(`${prefix}subactivities.activities.program_id`, f.program);
+  let q: any = q0;
+  if (f.sub) q = q.eq(`${prefix}subactivity_id`, f.sub);
+  else if (f.kegiatan) q = q.eq(`${prefix}subactivities.activity_id`, f.kegiatan);
+  else if (f.program) q = q.eq(`${prefix}subactivities.activities.program_id`, f.program);
+  // Belanja: rekening tertentu paling spesifik; jenis = awalan kode rekening (mis. 5.1.02.% = Barang dan Jasa).
+  if (f.rekening) q = q.eq(`${prefix}account_id`, f.rekening);
+  else if (f.jenis) q = q.like(`${prefix}expenditure_accounts.code`, `${f.jenis}.%`);
   return q;
 }
 /**
  * Menerapkan filter ke kueri `transactions` Supabase. Kueri HARUS memilih `budget_entries!inner(subactivities!inner(activities!inner(...)))`
  * agar filter program/kegiatan/sub kegiatan pada relasi bersarang dapat dipakai (tanpa daftar ID panjang pada URL).
  */
-export function applyTxFilter<Q extends { eq: Function; gte: Function; lte: Function; is: Function; not: Function; lt: Function; or: Function }>(q0: Q, f: TxFilter): Q {
+export function applyTxFilter<Q extends { eq: Function; like: Function; gte: Function; lte: Function; is: Function; not: Function; lt: Function; or: Function }>(q0: Q, f: TxFilter): Q {
   let q: any = applyScopeFilter(q0, f, "budget_entries.");
   const col = f.basis === "spm" ? "payment_date" : "transaction_date";
   if (f.from) q = q.gte(col, f.from);
