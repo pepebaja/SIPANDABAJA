@@ -63,3 +63,30 @@ describe("pemeriksaan isian realisasi", () => {
     expect(payDateOutOfYear("2025-12-31", 2026)).toBe(true); expect(payDateOutOfYear("2026-01-01", 2026)).toBe(false); expect(payDateOutOfYear("", 2026)).toBe(false);
   });
 });
+
+import { rowIssues } from "@/lib/realization-issues";
+import { transactionSaveSchema } from "@/lib/transactions";
+describe("kontrol kelengkapan transaksi", () => {
+  const ok = { paymentDate: "2026-05-01", paymentNumber: "SP2D-1", rupCode: "123", methodName: "E-purchasing", providerName: "PT A" };
+  it("lengkap = tanpa catatan", () => expect(rowIssues(ok)).toEqual([]));
+  it("mendeteksi tanggal, nomor, RUP, metode, dan penyedia yang kurang", () => {
+    expect(rowIssues({ ...ok, paymentDate: null })).toEqual(["Tanggal SPM/SP2D belum diisi"]);
+    expect(rowIssues({ ...ok, paymentNumber: null })).toEqual(["No SPM/SP2D belum diisi"]);
+    expect(rowIssues({ ...ok, rupCode: null })).toEqual(["Kode RUP belum diisi"]);
+    expect(rowIssues({ ...ok, methodName: null })).toEqual(["Metode pemilihan belum diisi"]);
+    expect(rowIssues({ ...ok, providerName: null })).toEqual(["Penyedia belum diisi"]);
+  });
+  it("belanja non-pengadaan tidak dituntut RUP/metode/penyedia", () => expect(rowIssues({ paymentDate: "2026-05-01", paymentNumber: "X", rupCode: null, methodName: null, providerName: null })).toEqual([]));
+});
+describe("simpan perubahan transaksi", () => {
+  const id = "11111111-2222-3333-4444-555555555555";
+  it("kolom kosong berarti dihapus (null), nilai dinormalisasi", () => {
+    const r = transactionSaveSchema.parse({ id, transaction_date: "2026-05-01", amount: "1.250.000,50", payment_date: "", payment_number: "  ", rup_code: "", method_id: "", provider_id: "", notes: "" });
+    expect(r).toMatchObject({ amount: "1250000.50", payment_date: null, payment_number: null, rup_code: null, method_id: null, provider_id: null, notes: null });
+  });
+  it("menolak nilai nol/tidak valid dan tanggal transaksi kosong", () => {
+    expect(transactionSaveSchema.safeParse({ id, transaction_date: "2026-05-01", amount: "0" }).success).toBe(false);
+    expect(transactionSaveSchema.safeParse({ id, transaction_date: "", amount: "100" }).success).toBe(false);
+    expect(transactionSaveSchema.safeParse({ id, transaction_date: "2026-05-01", amount: "-500" }).success).toBe(true);
+  });
+});
