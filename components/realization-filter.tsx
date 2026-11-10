@@ -2,12 +2,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CEK_OPTIONS, type TxFilter } from "@/lib/realization-filter";
-type Prog = { id: string; code: string; name: string }; type Act = Prog & { program_id: string }; type Sub = Prog & { activity_id: string };
+import { inJenis, jenisOfCode, jenisOptions } from "@/lib/belanja";
+type Prog = { id: string; code: string; name: string }; type Acc = Prog; type Act = Prog & { program_id: string }; type Sub = Prog & { activity_id: string };
 const short = (s: string, n = 70) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Filter Daftar transaksi: dropdown bertingkat Program → Kegiatan → Sub kegiatan, rentang tanggal, dan kontrol kelengkapan. Dikirim sebagai GET (URL dapat dibagikan). */
-export function RealizationFilter({ programs, activities, subs, value, active }: { programs: Prog[]; activities: Act[]; subs: Sub[]; value: TxFilter; active: boolean }) {
+export function RealizationFilter({ programs, activities, subs, accounts, value, active }: { programs: Prog[]; activities: Act[]; subs: Sub[]; accounts: Acc[]; value: TxFilter; active: boolean }) {
   const [program, setProgram] = useState(value.program), [kegiatan, setKegiatan] = useState(value.kegiatan), [sub, setSub] = useState(value.sub);
+  const [jenis, setJenis] = useState(value.jenis), [rekening, setRekening] = useState(value.rekening);
+  const jenisList = jenisOptions(accounts.map((a) => a.code)), accList = accounts.filter((a) => inJenis(a.code, jenis));
+  const onJenis = (v: string) => { setJenis(v); setRekening(""); };
+  const onRekening = (v: string) => { setRekening(v); const a = accounts.find((x) => x.id === v); if (a && !inJenis(a.code, jenis)) setJenis(jenisOfCode(a.code)); else if (a && !jenis) setJenis(jenisOfCode(a.code)); };
   const acts = program ? activities.filter((a) => a.program_id === program) : activities;
   const actIds = new Set(kegiatan ? [kegiatan] : acts.map((a) => a.id));
   const subList = subs.filter((s) => actIds.has(s.activity_id));
@@ -28,6 +33,14 @@ export function RealizationFilter({ programs, activities, subs, value, active }:
         <label className={lbl}>Sub kegiatan
           <select name="sub" value={sub} onChange={(e) => onSub(e.target.value)} className="mt-1 w-full"><option value="">Semua sub kegiatan{kegiatan || program ? " pada pilihan ini" : ""}</option>
             {subList.map((s) => <option key={s.id} value={s.id}>{s.code} · {short(s.name)}</option>)}</select></label>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className={lbl}>Jenis belanja
+          <select name="jenis" value={jenis} onChange={(e) => onJenis(e.target.value)} className="mt-1 w-full"><option value="">Semua jenis belanja</option>
+            {jenisList.map((j) => <option key={j.prefix} value={j.prefix}>{j.level === 2 ? `${j.prefix} · ${j.label} (semua)` : `\u00A0\u00A0${j.prefix} · ${j.label}`}</option>)}</select></label>
+        <label className={`${lbl} md:col-span-2`}>Rekening belanja
+          <select name="rekening" value={rekening} onChange={(e) => onRekening(e.target.value)} className="mt-1 w-full"><option value="">Semua rekening belanja{jenis ? " pada jenis ini" : ""}</option>
+            {accList.map((a) => <option key={a.id} value={a.id}>{a.code} · {short(a.name, 90)}</option>)}</select></label>
       </div>
       <div className="grid gap-3 md:grid-cols-4">
         <label className={lbl}>Filter tanggal berdasarkan

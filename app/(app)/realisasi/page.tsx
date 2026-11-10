@@ -28,7 +28,7 @@ import { deleteTxImportJob } from "./unggah-actions";
 
 export const maxDuration = 60; // unggahan besar (pratinjau + penerapan) membutuhkan beberapa detik
 const PAGE = 25;
-type SP = { reset?: string; tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string; program?: string; kegiatan?: string; sub?: string; dari?: string; sampai?: string; basis?: string; cek?: string };
+type SP = { reset?: string; tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string; program?: string; kegiatan?: string; sub?: string; jenis?: string; rekening?: string; dari?: string; sampai?: string; basis?: string; cek?: string };
 const pill = (on: boolean) => `rounded-full border px-4 py-1.5 text-sm font-semibold transition ${on ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`;
 const Skeleton = ({ h = "h-40" }: { h?: string }) => <div className={`card ${h} animate-pulse bg-slate-100`} role="status" aria-label="Memuat" />;
 
@@ -47,14 +47,14 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
 
 // ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
 // Relasi bersarang !inner agar filter program/kegiatan/sub kegiatan dapat diterapkan langsung di database (tanpa daftar ID panjang pada URL).
-const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts(code)), rup_packages(rup_code)";
-const SUM_SEL = "amount, payment_date, budget_entries!inner(subactivity_id, subactivities!inner(activity_id, activities!inner(program_id)))";
+const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts!inner(code)), rup_packages(rup_code)";
+const SUM_SEL = "amount, payment_date, budget_entries!inner(subactivity_id, account_id, expenditure_accounts!inner(code), subactivities!inner(activity_id, activities!inner(program_id)))";
 /** Ringkasan sesuai filter: pagu rekening pada cakupan program/kegiatan/sub kegiatan (tahapan terpilih) dan transaksi yang lolos SEMUA filter (kumulatif), sehingga kartu di atas sama dengan isi daftar. */
 async function filteredTotals(sb: SupabaseClient, vid: string, yearId: string, f: TxFilter, fullPagu: string): Promise<Derived> {
   const versions = await loadStageVersions(sb, yearId), cur = versions.find((v) => v.id === vid);
   const ids = versions.filter((v) => v.id === vid || (cur && v.sortOrder < cur.sortOrder)).map((v) => v.id);
   const [entries, txs] = await Promise.all([
-    hasScopeFilter(f) ? fetchAll<any>((a, b) => applyScopeFilter(sb.from("budget_entries").select("amount, subactivities!inner(activity_id, activities!inner(program_id))").eq("budget_version_id", vid), f).order("id").range(a, b)) : Promise.resolve(null),
+    hasScopeFilter(f) ? fetchAll<any>((a, b) => applyScopeFilter(sb.from("budget_entries").select("amount, account_id, expenditure_accounts!inner(code), subactivities!inner(activity_id, activities!inner(program_id))").eq("budget_version_id", vid), f).order("id").range(a, b)) : Promise.resolve(null),
     fetchAll<any>((a, b) => applyTxFilter(sb.from("transactions").select(SUM_SEL).in("budget_version_id", ids.length ? ids : [vid]), f).order("id").range(a, b))]);
   const m = (v: unknown) => parseRupiah(v) ?? "0.00", pagu = entries ? fromCents(sumCents(entries.map((e: any) => m(e.amount)))) : fullPagu;
   const ok = txs.filter((x: any) => x.payment_date), no = txs.filter((x: any) => !x.payment_date);
@@ -62,10 +62,11 @@ async function filteredTotals(sb: SupabaseClient, vid: string, yearId: string, f
 }
 async function DaftarTab({ sb, vid, yearId, year, sp, canWrite, summary }: { sb: SupabaseClient; vid: string; yearId: string; year: number; sp: SP; canWrite: boolean; summary: React.ReactNode }) {
   const f = parseTxFilter(sp), filtered = hasTxFilter(f), page = Math.max(1, Number(sp.page) || 1);
-  const [versions, programs, activities, subs, methods, provs] = await Promise.all([loadStageVersions(sb, yearId),
+  const [versions, programs, activities, subs, accounts, methods, provs] = await Promise.all([loadStageVersions(sb, yearId),
     fetchAll<any>((a, b) => sb.from("programs").select("id, code, name").order("code").range(a, b)),
     fetchAll<any>((a, b) => sb.from("activities").select("id, code, name, program_id").order("code").range(a, b)),
     fetchAll<any>((a, b) => sb.from("subactivities").select("id, code, name, activity_id").order("code").range(a, b)),
+    fetchAll<any>((a, b) => sb.from("expenditure_accounts").select("id, code, name").order("code").range(a, b)),
     canWrite ? fetchAll<any>((a, b) => sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[]),
     canWrite ? fetchAll<any>((a, b) => sb.from("providers").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[])]);
   const cur = versions.find((v) => v.id === vid);
@@ -79,7 +80,7 @@ async function DaftarTab({ sb, vid, yearId, year, sp, canWrite, summary }: { sb:
   const pageHref = (p: number) => `/realisasi?${qs({ ...txFilterParams(f), page: String(p) })}`;
   return (
     <div className="space-y-4">
-      <RealizationFilter programs={programs} activities={activities} subs={subs} value={f} active={filtered} />
+      <RealizationFilter programs={programs} activities={activities} subs={subs} accounts={accounts} value={f} active={filtered} />
       {f.dateError && <p role="alert" className="alert alert-warn text-sm">Tanggal awal lebih besar daripada tanggal akhir, sehingga rentang tanggal diabaikan. Periksa kembali isiannya.</p>}
       {summary}
       {tx.error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat.</p> : !rows.length ? <p className="text-slate-600">Belum ada transaksi{filtered ? " dengan filter ini" : ""}.</p> : (
