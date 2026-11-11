@@ -21,3 +21,14 @@ export function summarizeProviders(tx: ProvTx[], contracts: ProvContract[]): Pro
     packages: [...p.pk.values()].sort((a, b) => cmp(a.code, b.code)).map((k) => ({ code: k.code, name: k.name, methods: [...k.methods].sort(cmp), pagu: k.pagu, realized: fromCents(sumCents(k.real)), contract: fromCents(sumCents(k.contract)) })) }))
     .sort((a, b) => b.packageCount - a.packageCount || (BigInt(b.realized.replace(".", "")) === BigInt(a.realized.replace(".", "")) ? 0 : BigInt(b.realized.replace(".", "")) > BigInt(a.realized.replace(".", "")) ? 1 : -1) || cmp(a.name, b.name));
 }
+
+export type RankBy = "contract" | "packages";
+export type RankedProvider = { rank: number; id: string; name: string; packages: number; contract: string; realized: string };
+/** Peringkat penyedia menurut total kontrak (seri: jumlah pekerjaan, lalu realisasi, lalu nama) atau menurut jumlah pekerjaan (seri: total kontrak). Peringkat sama untuk nilai utama yang sama. */
+export function rankProviders(list: ProviderStat[], by: RankBy): RankedProvider[] {
+  const c = (v: string) => BigInt(v.replace(".", "")), cmpBig = (a: bigint, b: bigint) => (a === b ? 0 : a > b ? -1 : 1);
+  const sorted = [...list].sort((a, b) => (by === "contract" ? cmpBig(c(a.contract), c(b.contract)) || b.packageCount - a.packageCount : b.packageCount - a.packageCount || cmpBig(c(a.contract), c(b.contract)))
+    || cmpBig(c(a.realized), c(b.realized)) || cmp(a.name, b.name));
+  let rank = 0, prev: string | null = null;
+  return sorted.map((p, i) => { const key = by === "contract" ? p.contract : String(p.packageCount); if (key !== prev) rank = i + 1; prev = key; return { rank, id: p.id, name: p.name, packages: p.packageCount, contract: p.contract, realized: p.realized }; });
+}
