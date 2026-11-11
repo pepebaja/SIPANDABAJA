@@ -78,3 +78,21 @@ describe("filter belanja", () => {
     calls.length = 0; applyTxFilter(q, parseTxFilter({ jenis: "5.1.02" })); expect(calls).toEqual(["like:budget_entries.expenditure_accounts.code,5.1.02.%"]);
   });
 });
+
+import { computeLimits } from "@/lib/realization-limits";
+describe("aturan kas kumulatif per triwulan", () => {
+  const E = (cash: (string | null)[], realized: string[]) => ({ pagu: "10000.00", cash, realized } as any);
+  it("sisa kas triwulan I dapat dipakai pada triwulan berikutnya", () => {
+    const l = computeLimits(E(["1000.00", null, null, null], ["300.00", "0.00", "0.00", "0.00"]), 2); // TW I sisa 700
+    expect(l.max).toBe("700.00"); expect(l.limitedBy).toBe("kas");
+    expect(computeLimits(E(["1000.00", null, null, null], ["300.00", "0.00", "0.00", "0.00"]), 4).max).toBe("700.00");
+  });
+  it("belanja triwulan II dengan kas baru ada di triwulan III ditolak (maksimal 0)", () => {
+    expect(computeLimits(E([null, null, "1000.00", null], ["0.00", "0.00", "0.00", "0.00"]), 2).max).toBe("0.00");
+    expect(computeLimits(E([null, null, "1000.00", null], ["0.00", "0.00", "0.00", "0.00"]), 3).max).toBe("1000.00");
+  });
+  it("realisasi besar di triwulan lebih akhir ikut membatasi sisa kas kumulatif", () => {
+    expect(computeLimits(E(["500.00", "500.00", null, null], ["0.00", "0.00", "800.00", "0.00"]), 1).max).toBe("200.00");   // TW III: kas kumulatif 1000 - realisasi 800
+    expect(computeLimits(E(["500.00", "500.00", null, null], ["0.00", "0.00", "200.00", "0.00"]), 1).max).toBe("500.00");   // TW I tetap dibatasi kas TW I
+  });
+});

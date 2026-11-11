@@ -33,3 +33,27 @@ describe("tanggal bawaan: Murni < 16 Mar, Pergeseran 16 Mar - 26 Okt, Perubahan 
   it("Perubahan: 27 Okt s.d. 31 Des", () => { expect(at("2026-10-27")).toBe("p"); expect(at("2026-12-31")).toBe("p"); });
   it("tanggal yang diatur admin didahulukan atas bawaan", () => expect(resolveVersion([V("m", "MURNI", 1, null), V("g", "PERGESERAN", 2, "2026-04-01")], 2026, "2026-03-20")?.id).toBe("m"));
 });
+
+import { quarterOf, stageWindows } from "@/lib/stage-rule";
+describe("tahapan menurut tanggal penetapan dan triwulan", () => {
+  const mk = (id: string, code: string, so: number, no: number, from: string | null): StageVersion => ({ id, stageCode: code, stageName: code, sortOrder: so, versionNo: no, effectiveFrom: from });
+  const vs = [mk("m", "MURNI", 1, 1, "2026-01-02"), mk("g1", "PERGESERAN", 2, 1, "2026-03-16"), mk("p", "PERUBAHAN", 3, 1, "2026-10-27")];
+  it("14 Maret masuk Murni (TW I), 5 Oktober masuk Pergeseran (TW IV), 27 Oktober Perubahan", () => {
+    expect(resolveVersion(vs, 2026, "2026-03-14")?.id).toBe("m"); expect(quarterOf("2026-03-14")).toBe(1);
+    expect(resolveVersion(vs, 2026, "2026-03-16")?.id).toBe("g1");
+    expect(resolveVersion(vs, 2026, "2026-10-05")?.id).toBe("g1"); expect(quarterOf("2026-10-05")).toBe(4);
+    expect(resolveVersion(vs, 2026, "2026-10-26")?.id).toBe("g1"); expect(resolveVersion(vs, 2026, "2026-10-27")?.id).toBe("p");
+  });
+  it("tanggal sebelum penetapan tahapan pertama tidak punya tahapan", () => expect(resolveVersion(vs, 2026, "2026-01-01")).toBeNull());
+  it("Pergeseran I dan II dengan tanggal penetapan berbeda sama-sama dipakai", () => {
+    const v2 = [...vs, mk("g2", "PERGESERAN", 2, 2, "2026-07-01")];
+    expect(resolveVersion(v2, 2026, "2026-05-10")?.id).toBe("g1"); expect(resolveVersion(v2, 2026, "2026-07-01")?.id).toBe("g2"); expect(resolveVersion(v2, 2026, "2026-10-05")?.id).toBe("g2");
+  });
+  it("triwulan: I Jan-Mar, II Apr-Jun, III Jul-Sep, IV Okt-Des", () => {
+    expect([quarterOf("2026-01-01"), quarterOf("2026-03-31"), quarterOf("2026-04-01"), quarterOf("2026-06-30"), quarterOf("2026-07-01"), quarterOf("2026-09-30"), quarterOf("2026-10-01"), quarterOf("2026-12-31")]).toEqual([1, 1, 2, 2, 3, 3, 4, 4]);
+    expect(quarterOf("")).toBeNull(); expect(quarterOf("2026-13-01")).toBeNull();
+  });
+  it("jendela berlaku tahapan: berakhir sehari sebelum tahapan berikutnya", () => {
+    expect(stageWindows(vs, 2026).map((w) => [w.id, w.start, w.end])).toEqual([["m", "2026-01-02", "2026-03-15"], ["g1", "2026-03-16", "2026-10-26"], ["p", "2026-10-27", "2026-12-31"]]);
+  });
+});
