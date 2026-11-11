@@ -15,3 +15,5 @@ export function jenisOptions(codes: string[]): JenisOption[] {
 /** Rekening termasuk jenis (prefix) tertentu; prefix kosong = semua. */
 export const inJenis = (code: string, prefix: string): boolean => !prefix || code.startsWith(`${prefix}.`);
 export const jenisOfCode = (code: string): string => code.split(".").slice(0, 3).join(".");
+/** Nama jenis belanja untuk awalan kode (2/3 segmen); awalan yang tidak dikenal diberi nama generik. */
+export const jenisName = (prefix: string): string => NAMA[prefix] ?? `Kelompok ${prefix}`;
