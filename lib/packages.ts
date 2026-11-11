@@ -17,3 +17,16 @@ export const packageCreateSchema = z.object({
   ppbj_id: optUuid, ppk_id: optUuid, pptk_id: optUuid, due_date: optDate,
 });
 export const modeOfMethod = (methodName: string | null | undefined): "penyedia" | "swakelola" => (/swakelola/i.test(methodName ?? "") ? "swakelola" : "penyedia");
+
+/**
+ * Ubah paket dari dialog "Ubah" di daftar paket. Formulir mengirim seluruh isian: pejabat/tenggat yang dikosongkan = dihapus.
+ * Kode paket = kode RUP, tidak diubah di sini (tautan RUP diubah di rincian paket). Mengubah pagu paket tidak mengubah pagu RUP/anggaran.
+ */
+export const packageEditSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1, "Nama paket wajib diisi").max(300, "Nama paket maksimal 300 karakter"),
+  pagu: z.string().transform((v, ctx) => { const p = parseRupiah(v); if (p === null || p.startsWith("-")) { ctx.addIssue({ code: "custom", message: "Pagu harus angka rupiah tidak negatif" }); return z.NEVER; } return p; }),
+  execution_mode: z.enum(["penyedia", "swakelola"], { message: "Pilih mode pelaksanaan" }),
+  status: z.string().trim().min(1, "Pilih status").max(50),
+  method_id: optUuid, ppbj_id: optUuid, ppk_id: optUuid, pptk_id: optUuid, due_date: optDate,
+});
