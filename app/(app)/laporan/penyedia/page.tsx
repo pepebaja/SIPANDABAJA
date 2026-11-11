@@ -5,7 +5,7 @@ import { getBudgetContext } from "@/lib/server/budget-context";
 import { loadStageVersions } from "@/lib/server/stage-versions";
 import { fetchAll } from "@/lib/server/fetch-all";
 import { parseRupiah } from "@/lib/import/parse";
-import { summarizeProviders, type ProvContract, type ProvTx } from "@/lib/provider-report";
+import { loadProviderStats } from "@/lib/server/provider-data";
 import { formatRupiah } from "@/lib/format";
 import { fromCents, sumCents } from "@/lib/money";
 import { PrintButton } from "@/components/print-button";
@@ -15,16 +15,10 @@ const rp = (v: string | null) => (v === null ? "-" : formatRupiah(v));
 export default async function PenyediaReportPage() {
   const [s, ctx] = await Promise.all([getSession(), getBudgetContext()]); if (!s) return null;
   if (!ctx?.yearId) return <p className="alert alert-info max-w-xl">Belum ada tahun anggaran untuk konteks ini.</p>;
-  const sb = await createClient(), ids = (await loadStageVersions(sb, ctx.yearId)).map((v) => v.id);   // satu tahun anggaran = seluruh tahapan
+  const sb = await createClient(), { list, versionIds: ids } = await loadProviderStats(sb, ctx.yearId);   // satu tahun anggaran = seluruh tahapan
   if (!ids.length) return <p className="alert alert-info max-w-xl">Belum ada versi anggaran pada tahun ini.</p>;
-  const [tx, ct, missing] = await Promise.all([
-    fetchAll<any>((f, t) => sb.from("transactions").select("amount, payment_date, provider_id, providers(name), rup_packages(rup_code, name, pagu), procurement_methods(name)").in("budget_version_id", ids).not("provider_id", "is", null).order("id").range(f, t)),
-    fetchAll<any>((f, t) => sb.from("contracts_or_orders").select("id, contract_value, provider_id, providers(name), procurement_packages!inner(budget_version_id, internal_code, name, pagu)").in("procurement_packages.budget_version_id", ids).not("provider_id", "is", null).order("id").range(f, t)),
-    sb.from("transactions").select("id", { count: "exact", head: true }).in("budget_version_id", ids).is("provider_id", null).or("rup_package_id.not.is.null,procurement_method_id.not.is.null")]);
-  const m = (v: unknown) => parseRupiah(v) ?? "0.00";
-  const txs: ProvTx[] = tx.map((r) => ({ providerId: r.provider_id, providerName: r.providers?.name ?? "(tanpa nama)", code: r.rup_packages?.rup_code ?? null, rupName: r.rup_packages?.name ?? null, pagu: r.rup_packages ? m(r.rup_packages.pagu) : null, methodName: r.procurement_methods?.name ?? null, amount: m(r.amount), paid: !!r.payment_date }));
-  const cts: ProvContract[] = ct.map((r) => ({ providerId: r.provider_id, providerName: r.providers?.name ?? "(tanpa nama)", code: r.procurement_packages?.internal_code ?? null, name: r.procurement_packages?.name ?? null, pagu: r.procurement_packages ? m(r.procurement_packages.pagu) : null, value: m(r.contract_value) }));
-  const list = summarizeProviders(txs, cts), pkgTotal = new Set(list.flatMap((p) => p.packages.map((k) => k.code))).size, noProv = missing.count ?? 0;
+  const missing = await sb.from("transactions").select("id", { count: "exact", head: true }).in("budget_version_id", ids).is("provider_id", null).or("rup_package_id.not.is.null,procurement_method_id.not.is.null");
+  const pkgTotal = new Set(list.flatMap((p) => p.packages.map((k) => k.code))).size, noProv = missing.count ?? 0;
   return (
     <section className="max-w-6xl space-y-4">
       <Link href="/laporan" className="no-print link text-sm">← Laporan &amp; dokumen</Link>

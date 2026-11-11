@@ -7,6 +7,8 @@ import { rp } from "@/lib/format";
 import { MonthlyChart } from "@/components/monthly-chart-lazy";
 import { Donut, QuarterChart } from "@/components/dashboard-charts-lazy";
 import { DashboardExplorer } from "@/components/dashboard-explorer";
+import { ProviderRanking } from "@/components/provider-ranking";
+import { loadProviderStats } from "@/lib/server/provider-data";
 import { loadDashboardExtra } from "@/lib/server/dashboard-extra";
 import { Suspense } from "react";
 import { quarterOf } from "@/lib/stage-rule";
@@ -26,7 +28,7 @@ async function QuickLinks() {
 function Skel({ h = "h-64" }: { h?: string }) { return <div className={`${h} animate-pulse rounded-2xl bg-slate-100`} role="status" aria-label="Memuat" />; }
 /** Bagian analitik (di-stream agar kartu utama tampil lebih dulu). Semua kartu dan baris dapat diklik menuju data terfilter. */
 async function Insights({ sb, vid, yearId, unverified, unverifiedCount, overPagu, followup }: { sb: Awaited<ReturnType<typeof createClient>>; vid: string; yearId: string; unverified: string; unverifiedCount: number; overPagu: number; followup: number }) {
-  const x = await loadDashboardExtra(sb, vid, yearId), nowQ = quarterOf(new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)) ?? 1;   // triwulan berjalan (WIB)
+  const [x, prov] = await Promise.all([loadDashboardExtra(sb, vid, yearId), loadProviderStats(sb, yearId)]), nowQ = quarterOf(new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)) ?? 1;   // triwulan berjalan (WIB)
   const tiles: { label: string; n: number | null; hint: string; href: string; bad: boolean }[] = [
     { label: "Belum diakui", n: unverifiedCount, hint: `${rp(unverified)} belum bertanggal SPM/SP2D`, href: "/realisasi?tab=daftar&cek=tanpa_tgl", bad: unverifiedCount > 0 },
     { label: "No SPM/SP2D kosong", n: x.alerts.noSpm, hint: "sudah bertanggal, nomor belum diisi", href: "/realisasi?tab=daftar&cek=tanpa_no", bad: (x.alerts.noSpm ?? 0) > 0 },
@@ -48,6 +50,8 @@ async function Insights({ sb, vid, yearId, unverified, unverifiedCount, overPagu
       </div>
       <div className="card p-5"><div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h2>Jelajahi anggaran dan serapan</h2><p className="text-xs text-slate-500">Klik baris untuk membuka Daftar transaksi dengan filter yang sama</p></div>
         <DashboardExplorer levels={x.levels} /></div>
+      <div className="card p-5"><div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h2>Peringkat penyedia</h2><p className="text-xs text-slate-500">Penyedia pelaksana pekerjaan seluruh tahapan pada tahun anggaran ini</p></div>
+        <ProviderRanking list={prov.list} /></div>
       <div className="card p-5"><div className="mb-3 flex items-baseline justify-between"><h2>Transaksi terbaru</h2><Link href="/realisasi?tab=daftar" className="link text-sm">Lihat semua →</Link></div>
         {x.recent.length ? <ul className="divide-y divide-slate-100">{x.recent.map((r) => <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm"><span className="min-w-0 truncate"><span className="tabular-nums text-slate-500">{r.date}</span> · <b className="tabular-nums text-navy-800">{r.sub}</b> {r.text}</span>
           <span className="flex shrink-0 items-center gap-2"><span className={`badge ${r.recognized ? "badge-ok" : "badge-warn"}`}>{r.recognized ? "diakui" : "belum diakui"}</span><b className="tabular-nums">{rp(r.amount)}</b></span></li>)}</ul> : <p className="text-slate-600">Belum ada transaksi.</p>}</div>
