@@ -105,3 +105,16 @@ describe("ubah paket pengadaan", () => {
     expect(packageEditSchema.safeParse({ ...base, due_date: "05/11/2026" }).success).toBe(false);
   });
 });
+
+import { rankProviders, type ProviderStat } from "@/lib/provider-report";
+describe("peringkat penyedia", () => {
+  const P = (id: string, name: string, packageCount: number, contract: string, realized = "0.00"): ProviderStat => ({ id, name, packageCount, txCount: 0, txNoCode: 0, realized, contract, packages: [] });
+  const list = [P("a", "PT A", 5, "1000.00"), P("b", "PT B", 2, "9000.00"), P("c", "PT C", 9, "1000.00"), P("d", "PT D", 1, "0.00")];
+  it("menurut total kontrak: terbesar dulu, seri memakai jumlah pekerjaan", () => {
+    expect(rankProviders(list, "contract").map((r) => [r.rank, r.name])).toEqual([[1, "PT B"], [2, "PT C"], [2, "PT A"], [4, "PT D"]]);
+  });
+  it("menurut jumlah pekerjaan: terbanyak dulu", () => {
+    expect(rankProviders(list, "packages").map((r) => [r.rank, r.name])).toEqual([[1, "PT C"], [2, "PT A"], [3, "PT B"], [4, "PT D"]]);
+  });
+  it("daftar kosong", () => expect(rankProviders([], "contract")).toEqual([]));
+});
