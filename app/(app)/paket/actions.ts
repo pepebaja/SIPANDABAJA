@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getBudgetContext } from "@/lib/server/budget-context";
 import { fetchAll } from "@/lib/server/fetch-all";
-import { modeOfMethod, packageCreateSchema } from "@/lib/packages";
+import { modeOfMethod, packageCreateSchema, packageEditSchema } from "@/lib/packages";
+import { getSession } from "@/lib/server/session";
+import { can } from "@/lib/rbac";
 import type { FormState } from "../master/actions";
 
 /** Membuat satu paket dari kode RUP yang diisi. Kode paket = kode RUP; nama, pagu, metode, dan PPTK (dari anggaran yang dialokasikan ke RUP) terisi otomatis. */
@@ -38,4 +40,31 @@ export async function generatePackagesFromRup(): Promise<void> {
   const used = new Set(have.map((h) => h.rup_package_id).filter(Boolean)), rows = rups.filter((r) => !used.has(r.id)).map((r) => ({ budget_version_id: ctx.versionId!, rup_package_id: r.id, internal_code: r.rup_code, name: r.name, pagu: r.pagu, method_id: r.planned_method_id, execution_mode: modeOfMethod(r.method?.name) }));
   for (let i = 0; i < rows.length; i += 200) { const { error } = await sb.from("procurement_packages").insert(rows.slice(i, i + 200)); if (error) redirect("/paket?error=generate"); }
   revalidatePath("/paket"); redirect(`/paket?made=${rows.length}`);
+}
+
+const NO_AUTH = "Anda tidak berwenang mengubah paket (hanya Super Admin, Admin OPD, dan PPBJ).";
+/** Mengubah data paket dari daftar paket (nama, pagu, metode, mode, status, tenggat, pejabat). Hasil dan galat ditampilkan di dialog. */
+export async function updatePackage(_p: FormState, fd: FormData): Promise<FormState> {
+  const s = await getSession(); if (!s || !can(s.roles, "rup:write")) return { error: NO_AUTH };
+  const p = packageEditSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) return { error: p.error.issues.map((i) => i.message).join("; ") };
+  const { id, ...d } = p.data, sb = await createClient();
+  const { data: st } = await sb.from("package_statuses").select("code").eq("code", d.status).eq("is_active", true).maybeSingle();
+  if (!st) return { error: "Status paket tidak dikenal atau nonaktif." };
+  const { data, error } = await sb.from("procurement_packages").update(d).eq("id", id).select("id");
+  if (error?.code === "P0001") return { error: error.message };
+  if (error || !data?.length) return { error: "Perubahan ditolak. Paket tidak ditemukan atau Anda tidak berwenang." };
+  revalidatePath("/paket"); revalidatePath(`/paket/${id}`); revalidatePath("/");
+  return { ok: true };
+}
+
+/** Menghapus paket yang belum punya transaksi maupun kontrak/SP (aturan ditegakkan database). */
+export async function deletePackage(_p: FormState, fd: FormData): Promise<FormState> {
+  const s = await getSession(); if (!s || !can(s.roles, "rup:write")) return { error: NO_AUTH };
+  const id = String(fd.get("id") ?? ""); if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Paket tidak valid." };
+  const { error } = await (await createClient()).rpc("delete_procurement_package", { p_id: id });
+  if (error?.code === "P0001") return { error: error.message };
+  if (error?.code === "42883") return { error: "Migrasi database 20260121 (hapus paket) belum dijalankan di Supabase." };
+  if (error) return { error: "Paket tidak dapat dihapus. Anda mungkin tidak berwenang." };
+  revalidatePath("/paket"); revalidatePath("/");
+  return { ok: true };
 }

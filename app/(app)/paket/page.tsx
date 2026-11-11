@@ -6,6 +6,9 @@ import { parseRupiah } from "@/lib/import/parse";
 import { todayIso } from "@/lib/date";
 import { Icon } from "@/components/icons";
 import { generatePackagesFromRup } from "./actions";
+import { PackageRowActions } from "@/components/package-row-actions";
+import { getSession } from "@/lib/server/session";
+import { can } from "@/lib/rbac";
 export const metadata = { title: "Paket pengadaan" };
 const PAGE = 25;
 const KELOMPOK: Record<string, string> = { sudah_diproses: "Sudah diproses", belum_diproses: "Belum diproses", selesai: "Selesai", tidak_aktif: "Tidak aktif" };
@@ -14,11 +17,11 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams; const ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p className="alert alert-info max-w-xl">Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
   const q = (sp.q ?? "").replace(/[%,()*]/g, " ").trim().slice(0, 80), page = Math.max(1, Number(sp.page) || 1);
-  const sb = await createClient();
+  const sb = await createClient(), session = await getSession(), canWrite = !!session && can(session.roles, "rup:write");
   const { data: sts } = await sb.from("package_statuses").select("code, name, stage_group, needs_followup").eq("is_active", true).order("sort_order");
   const meta = sts ?? [], codes = (f: (s: (typeof meta)[number]) => boolean) => safe(meta.filter(f).map((s) => s.code));
   const status = meta.some((s) => s.code === sp.status) ? sp.status! : "", kelompok = KELOMPOK[sp.kelompok ?? ""] ? sp.kelompok! : "", tl = sp.filter === "tindak-lanjut";
-  let query = sb.from("procurement_packages").select("id, internal_code, name, pagu, status, due_date, rup_package_id", { count: "exact" })
+  let query = sb.from("procurement_packages").select("id, internal_code, name, pagu, status, due_date, rup_package_id, method_id, execution_mode, ppbj_id, ppk_id, pptk_id", { count: "exact" })
     .eq("budget_version_id", ctx.versionId).order("internal_code").range((page - 1) * PAGE, page * PAGE - 1);
   if (q) query = query.or(`name.ilike.%${q}%,internal_code.ilike.%${q}%`);
   if (status) query = query.eq("status", status);
@@ -28,6 +31,9 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
     query = query.in("status", active.length ? active : ["__none__"]).or(["rup_package_id.is.null", ...(fu.length ? [`status.in.(${fu.join(",")})`] : []), `and(due_date.lt.${todayIso()},status.not.in.(${done.join(",") || "__none__"}))`].join(","));
   }
   const { data, count, error } = await query;
+  const [methodsRes, offRes] = canWrite ? await Promise.all([sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name"), sb.from("officials").select("id, name, nip, official_type").eq("is_active", true).order("name").limit(1000)]) : [null, null];
+  const methodOpts = (methodsRes?.data ?? []).map((m) => ({ value: m.id as string, label: m.name as string })), statusOpts = meta.map((m) => ({ value: m.code as string, label: m.name as string }));
+  const off = (t: string) => (offRes?.data ?? []).filter((r) => r.official_type === t).map((r) => ({ value: r.id as string, label: r.nip ? `${r.name} - NIP ${r.nip}` : (r.name as string) }));
   const statusName = new Map(meta.map((s) => [s.code, s.name])), pages = Math.max(1, Math.ceil((count ?? 0) / PAGE));
   const href = (p: number) => `/paket?${new URLSearchParams({ ...(q ? { q } : {}), ...(status ? { status } : {}), ...(kelompok ? { kelompok } : {}), ...(tl ? { filter: "tindak-lanjut" } : {}), page: String(p) })}`;
   const active = status ? `Status: ${statusName.get(status)}` : kelompok ? `Kelompok: ${KELOMPOK[kelompok]}` : tl ? "Perlu tindak lanjut" : "";
@@ -53,11 +59,13 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
       {active && <p className="alert alert-info inline-block py-2 text-sm">Filter aktif: <b>{active}</b></p>}
       {error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat. Muat ulang halaman.</p>
         : !data?.length ? <p className="text-slate-600">{q || active ? "Tidak ada paket yang cocok." : "Belum ada paket pada tahun/tahapan ini."}</p> : (
-        <div className="table-wrap"><table><thead><tr><th>Kode RUP</th><th>Nama paket</th><th className="text-right">Pagu</th><th>Status</th><th>Tenggat</th></tr></thead>
+        <div className="table-wrap"><table><thead><tr><th>Kode RUP</th><th>Nama paket</th><th className="text-right">Pagu</th><th>Status</th><th>Tenggat</th>{canWrite && <th>Aksi</th>}</tr></thead>
           <tbody>{data.map((p) => <tr key={p.id}><td><Link className="link" href={`/paket/${p.id}`}>{p.internal_code}</Link></td>
             <td>{p.name}{!p.rup_package_id && <span className="badge badge-warn ml-2">Belum ada kode RUP</span>}</td>
             <td className="text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td><span className="badge badge-info">{statusName.get(p.status) ?? p.status}</span></td>
-            <td className={p.due_date && p.due_date < todayIso() ? "font-semibold text-amber-800" : ""}>{p.due_date ? p.due_date.split("-").reverse().join("/") : "-"}</td></tr>)}</tbody></table></div>)}
+            <td className={p.due_date && p.due_date < todayIso() ? "font-semibold text-amber-800" : ""}>{p.due_date ? p.due_date.split("-").reverse().join("/") : "-"}</td>
+            {canWrite && <td className="min-w-40"><PackageRowActions statuses={statusOpts} methods={methodOpts} ppbj={off("ppbj")} ppk={off("ppk")} pptk={off("pptk")}
+              row={{ id: p.id, code: p.internal_code, name: p.name, pagu: String(p.pagu), status: p.status, method_id: p.method_id, execution_mode: p.execution_mode, due_date: p.due_date, ppbj_id: p.ppbj_id, ppk_id: p.ppk_id, pptk_id: p.pptk_id }} /></td>}</tr>)}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">
         {page > 1 && <Link className="link" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages} ({count ?? 0} paket)</span>
         {page < pages && <Link className="link" href={href(page + 1)}>Berikutnya</Link>}</nav>
