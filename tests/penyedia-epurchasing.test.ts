@@ -90,3 +90,18 @@ describe("simpan perubahan transaksi", () => {
     expect(transactionSaveSchema.safeParse({ id, transaction_date: "2026-05-01", amount: "-500" }).success).toBe(true);
   });
 });
+
+import { packageEditSchema } from "@/lib/packages";
+describe("ubah paket pengadaan", () => {
+  const id = "11111111-2222-3333-4444-555555555555", base = { id, name: "  Belanja Jasa  ", pagu: "130.000.000,00", execution_mode: "penyedia", status: "RENCANA", method_id: "", ppbj_id: "", ppk_id: "", pptk_id: "", due_date: "" };
+  it("menormalkan isian dan menganggap pejabat/tenggat kosong sebagai dihapus", () => {
+    expect(packageEditSchema.parse(base)).toMatchObject({ name: "Belanja Jasa", pagu: "130000000.00", method_id: null, ppbj_id: null, ppk_id: null, pptk_id: null, due_date: null });
+  });
+  it("menolak nama kosong, pagu negatif/tidak valid, mode tidak dikenal, dan tanggal salah", () => {
+    expect(packageEditSchema.safeParse({ ...base, name: " " }).success).toBe(false);
+    expect(packageEditSchema.safeParse({ ...base, pagu: "-1" }).success).toBe(false);
+    expect(packageEditSchema.safeParse({ ...base, pagu: "abc" }).success).toBe(false);
+    expect(packageEditSchema.safeParse({ ...base, execution_mode: "lainnya" }).success).toBe(false);
+    expect(packageEditSchema.safeParse({ ...base, due_date: "05/11/2026" }).success).toBe(false);
+  });
+});
