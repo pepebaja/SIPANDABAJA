@@ -12,10 +12,19 @@ const m = (v: unknown) => parseRupiah(v) ?? "0.00";
 export async function loadProviderStats(sb: SupabaseClient, yearId: string): Promise<{ list: ProviderStat[]; versionIds: string[] }> {
   const ids = (await loadStageVersions(sb, yearId)).map((v) => v.id);
   if (!ids.length) return { list: [], versionIds: [] };
+  const ctSel = (extra: string) => (f: number, t: number) => sb.from("contracts_or_orders").select(`id, contract_value, provider_id, doc_type, doc_number, doc_date${extra}, providers(name), procurement_packages!inner(budget_version_id, internal_code, name, pagu)`).in("procurement_packages.budget_version_id", ids).not("provider_id", "is", null).order("id").range(f, t);
   const [tx, ct] = await Promise.all([
     fetchAll<any>((f, t) => sb.from("transactions").select("amount, payment_date, provider_id, providers(name), rup_packages(rup_code, name, pagu), procurement_methods(name)").in("budget_version_id", ids).not("provider_id", "is", null).order("id").range(f, t)).catch(() => [] as any[]),
-    fetchAll<any>((f, t) => sb.from("contracts_or_orders").select("id, contract_value, provider_id, providers(name), procurement_packages!inner(budget_version_id, internal_code, name, pagu)").in("procurement_packages.budget_version_id", ids).not("provider_id", "is", null).order("id").range(f, t)).catch(() => [] as any[])]);
+    fetchAll<any>(ctSel(", description")).catch(() => fetchAll<any>(ctSel("")).catch(() => [] as any[]))]);
   const txs: ProvTx[] = tx.map((r) => ({ providerId: r.provider_id, providerName: r.providers?.name ?? "(tanpa nama)", code: r.rup_packages?.rup_code ?? null, rupName: r.rup_packages?.name ?? null, pagu: r.rup_packages ? m(r.rup_packages.pagu) : null, methodName: r.procurement_methods?.name ?? null, amount: m(r.amount), paid: !!r.payment_date }));
-  const cts: ProvContract[] = ct.map((r) => ({ providerId: r.provider_id, providerName: r.providers?.name ?? "(tanpa nama)", code: r.procurement_packages?.internal_code ?? null, name: r.procurement_packages?.name ?? null, pagu: r.procurement_packages ? m(r.procurement_packages.pagu) : null, value: m(r.contract_value) }));
-  return { list: summarizeProviders(txs, cts), versionIds: ids };
+  // Kontrak yang dibawa ke tahapan berikutnya tersalin pada paket tahapan itu: dokumen yang sama pada beberapa tahapan dihitung sekali
+  // (diambil dari tahapan yang memuat salinan terbanyak); dokumen berbeda atau kembar dalam satu tahapan tetap dihitung semua.
+  const groups = new Map<string, Map<string, ProvContract[]>>();
+  for (const r of ct) {
+    const c: ProvContract = { providerId: r.provider_id, providerName: r.providers?.name ?? "(tanpa nama)", code: r.procurement_packages?.internal_code ?? null, name: r.procurement_packages?.name ?? null, pagu: r.procurement_packages ? m(r.procurement_packages.pagu) : null, value: m(r.contract_value) };
+    const key = [c.code, c.providerId, r.doc_type, r.doc_number ?? "", r.doc_date ?? "", c.value, r.description ?? ""].join("|"), byVer = groups.get(key) ?? new Map<string, ProvContract[]>();
+    const ver = r.procurement_packages?.budget_version_id ?? "-"; byVer.set(ver, [...(byVer.get(ver) ?? []), c]); groups.set(key, byVer);
+  }
+  const uniq = [...groups.values()].flatMap((byVer) => [...byVer.values()].reduce((best, cur) => (cur.length > best.length ? cur : best)));
+  return { list: summarizeProviders(txs, uniq), versionIds: ids };
 }

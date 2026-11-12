@@ -28,5 +28,7 @@ export const packageEditSchema = z.object({
   pagu: z.string().transform((v, ctx) => { const p = parseRupiah(v); if (p === null || p.startsWith("-")) { ctx.addIssue({ code: "custom", message: "Pagu harus angka rupiah tidak negatif" }); return z.NEVER; } return p; }),
   execution_mode: z.enum(["penyedia", "swakelola"], { message: "Pilih mode pelaksanaan" }),
   status: z.string().trim().min(1, "Pilih status").max(50),
+  procurement_type: z.enum(["barang", "konstruksi", "konsultansi", "jasa_lainnya"], { message: "Pilih jenis pengadaan" }),
+  is_recurring: z.string().optional().transform((v) => v === "on" || v === "true"),
   method_id: optUuid, ppbj_id: optUuid, ppk_id: optUuid, pptk_id: optUuid, due_date: optDate,
 });

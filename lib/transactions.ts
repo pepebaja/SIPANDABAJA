@@ -8,7 +8,7 @@ const optText = (max: number, msg: string) => z.string().trim().max(max, msg).op
 const amt = z.string().transform((v, ctx) => { const p = parseRupiah(v); if (p === null || toCents(p) === 0n) { ctx.addIssue({ code: "custom", message: "Nilai harus angka rupiah dan tidak boleh nol (minus untuk koreksi)" }); return z.NEVER; } return p; });
 // Nilai positif = pembayaran; nilai minus = koreksi (mengurangi realisasi). Jenis dokumen/nomor dokumen/kode paket tidak lagi dicatat.
 export const transactionSchema = z.object({
-  budget_entry_id: z.string().uuid({ message: "Pilih rekening" }), rup_package_id: optUuid, procurement_method_id: optUuid, provider_id: optUuid, new_provider_name: optText(200, "Nama penyedia maksimal 200 karakter"),
+  budget_entry_id: z.string().uuid({ message: "Pilih rekening" }), rup_package_id: optUuid, procurement_method_id: optUuid, provider_id: optUuid, description: optText(300, "Uraian maksimal 300 karakter"), new_provider_name: optText(200, "Nama penyedia maksimal 200 karakter"),
   transaction_date: date, payment_date: optDate, payment_number: optText(100, "No SPM/SP2D maksimal 100 karakter"),
   amount: amt,
   notes: optText(500, "Catatan maksimal 500 karakter"),
@@ -26,5 +26,5 @@ export const transactionEditSchema = z.object({
  */
 export const transactionSaveSchema = z.object({
   id: z.string().uuid(), transaction_date: date, payment_date: optDate, payment_number: optText(100, "No SPM/SP2D maksimal 100 karakter"),
-  rup_code: optText(50, "Kode RUP maksimal 50 karakter"), method_id: optUuid, provider_id: optUuid, amount: amt, notes: optText(500, "Catatan maksimal 500 karakter"),
+  rup_code: optText(50, "Kode RUP maksimal 50 karakter"), method_id: optUuid, provider_id: optUuid, description: optText(300, "Uraian maksimal 300 karakter"), amount: amt, notes: optText(500, "Catatan maksimal 500 karakter"),
 });

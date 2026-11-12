@@ -10,7 +10,7 @@ const optUuid = z.string().transform((v) => v || null).pipe(z.string().uuid().nu
 const optDate = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, "Format tanggal tidak valid").transform((v) => v || null);
 // Nilai kontrak/SP BUKAN realisasi keuangan (dicatat terpisah di modul transaksi).
 export const contractSchema = z.object({
-  doc_type: z.enum(["kontrak", "spk", "surat_pesanan"]), doc_number: z.string().trim().max(100).transform((v) => v || null), doc_date: optDate,
+  doc_type: z.enum(["kontrak", "spk", "surat_pesanan", "bukti_pembelian", "sk_swakelola"]), description: z.string().trim().max(300, "Uraian maksimal 300 karakter").optional().transform((v) => v || null), doc_number: z.string().trim().max(100).transform((v) => v || null), doc_date: optDate,
   provider_id: optUuid, selection_result_value: money(false), contract_value: money(false) });
 export const rupSchema = z.object({
   rup_code: z.string().trim().min(1, "Wajib diisi").max(50), name: z.string().trim().min(1, "Wajib diisi").max(300),
