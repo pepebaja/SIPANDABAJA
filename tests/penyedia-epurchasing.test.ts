@@ -133,3 +133,27 @@ describe("rincian pelaksanaan paket berulang", () => {
     expect(summarizeExecutions([x("1", "10.00", null)], "0.00").pct).toBeNull();
   });
 });
+
+import { contractPaid } from "@/lib/contract-paid";
+import { isOverdue } from "@/lib/officer-performance";
+describe("pembayaran per dokumen kontrak/SP", () => {
+  const cs = [{ id: "c1", lineage: "L1", value: "1000.00" }, { id: "c1b", lineage: "L1", value: "1000.00" }, { id: "c2", lineage: "L2", value: "500.00" }, { id: "c3", lineage: "L3", value: null }];
+  it("terbayar dan sisa per dokumen; salinan lintas tahapan (lineage sama) berbagi pembayaran", () => {
+    const r = contractPaid(cs, [{ contractId: "c1", amount: "300.00" }, { contractId: "c1b", amount: "200.00" }, { contractId: "c2", amount: "100.00" }, { contractId: "c3", amount: "50.00" }]);
+    expect(r.get("c1")).toEqual({ value: "1000.00", paid: "500.00", remaining: "500.00" });
+    expect(r.get("c1b")?.paid).toBe("500.00");
+    expect(r.get("c2")).toEqual({ value: "500.00", paid: "100.00", remaining: "400.00" });
+    expect(r.get("c3")).toEqual({ value: null, paid: "50.00", remaining: null });
+  });
+  it("koreksi mengurangi terbayar dan sisa bisa negatif bila melampaui nilai", () => {
+    const r = contractPaid([cs[2]!], [{ contractId: "c2", amount: "700.00" }, { contractId: "c2", amount: "-100.00" }]);
+    expect(r.get("c2")).toMatchObject({ paid: "600.00", remaining: "-100.00" });
+  });
+});
+describe("paket berulang tidak dihitung terlambat", () => {
+  const base = { due: "2026-01-31", status: "PROSES", group: "diproses" } as any;
+  it("paket biasa melewati tenggat = terlambat; paket berulang tidak", () => {
+    expect(isOverdue(base, "2026-06-01")).toBe(true);
+    expect(isOverdue({ ...base, recurring: true }, "2026-06-01")).toBe(false);
+  });
+});
