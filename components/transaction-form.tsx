@@ -21,10 +21,10 @@ export function TransactionForm({ year, entries, rups, methods, providers, alloc
   const [rupId, setRupId] = useState(() => (prefill?.rupCode ? (rups.find((r) => r.code === prefill.rupCode)?.id ?? "") : "")), [entryId, setEntryId] = useState(""), [date, setDate] = useState(today), [amount, setAmount] = useState(""), [methodId, setMethodId] = useState(""), [methodTouched, setMethodTouched] = useState(false);
   const [qRup, setQRup] = useState(""), [qEntry, setQEntry] = useState(""), [qProv, setQProv] = useState("");
   const [providerId, setProviderId] = useState(""), [provTouched, setProvTouched] = useState(false), [newProv, setNewProv] = useState("");
-  const [payDate, setPayDate] = useState(""), [payNo, setPayNo] = useState(""), [notes, setNotes] = useState(""), [desc, setDesc] = useState(prefill?.description ?? "");
+  const [payDate, setPayDate] = useState(""), [payNo, setPayNo] = useState(""), [notes, setNotes] = useState(""), [desc, setDesc] = useState(prefill?.description ?? ""), [contractId, setContractId] = useState("");
   const amountRef = useRef<HTMLInputElement>(null);
   // Setelah tersimpan: kosongkan isian yang khas per transaksi, pertahankan RUP/rekening/tanggal/metode/penyedia untuk input berikutnya.
-  useEffect(() => { if (s.ok) { setAmount(""); setPayDate(""); setPayNo(""); setNotes(""); setDesc(""); amountRef.current?.focus(); } }, [s]);
+  useEffect(() => { if (s.ok) { setAmount(""); setPayDate(""); setPayNo(""); setNotes(""); setDesc(""); setContractId(""); amountRef.current?.focus(); } }, [s]);
   const rup = rups.find((r) => r.id === rupId) ?? null, entry = entries.find((e) => e.id === entryId) ?? null;
   const allocated = useMemo(() => new Set(rupId ? allocByRup[rupId] ?? [] : []), [rupId, allocByRup]);
   const rupOpts = useMemo(() => rups.filter((r) => r.id === rupId || hit(`${r.code} ${r.name}`, qRup)).slice(0, ENTRY_CAP), [rups, qRup, rupId]);
@@ -39,6 +39,8 @@ export function TransactionForm({ year, entries, rups, methods, providers, alloc
   const lim = stageEntry && q ? computeLimits(stageEntry, q, rup ? (stageRup ?? { pagu: rup.pagu, realized: rup.realized }) : null) : null;
   const noStageMatch = !!entry && !!stageW && !sl, noStageRup = !!rup && !!stageW && !stageRup;
   const val = parseRupiah(amount), isPayment = val !== null && toCents(val) > 0n, over = isPayment && lim && toCents(val!) > toCents(lim.max);
+  const contract = rup?.contracts.find((c) => c.id === contractId) ?? null, contractOver = !!contract && val !== null && toCents(val) > 0n && contract.remaining !== null && toCents(val) > toCents(contract.remaining);
+  const usePct = rup && val !== null && toCents(rup.pagu) > 0n ? Number(((toCents(rup.realized) + toCents(val)) * 1000n) / toCents(rup.pagu)) / 10 : null;
   const method = methodTouched ? methodId : (rup?.methodId ?? methodId);        // metode mengikuti rencana RUP sampai diubah pengguna
   const provider = provTouched ? providerId : (rup?.providerId ?? providerId);          // penyedia mengikuti kontrak paket RUP sampai diubah pengguna
   const provOpts = useMemo(() => providers.filter((p) => p.id === provider || hit(p.name, qProv)).slice(0, ENTRY_CAP), [providers, qProv, provider]);
@@ -91,6 +93,14 @@ export function TransactionForm({ year, entries, rups, methods, providers, alloc
           {isPayment && <p className={`text-sm ${over ? "font-semibold text-red-700" : "text-slate-700"}`}>Maksimal yang dapat dicatat pada {q ? QUARTER_SHORT[q - 1] : "tanggal ini"}: <b>{f(lim.max)}</b> <span className="text-slate-500">(dibatasi oleh {lim.limitedBy === "kas" ? "sisa kas kumulatif" : lim.limitedBy === "pagu" ? "pagu rekening" : "pagu RUP"})</span>{over && " - nilai melebihi batas, akan ditolak."}</p>}
           <p className="text-xs text-slate-500">Sisa dihitung dari semua transaksi tercatat . Kas triwulan berikutnya tidak dapat dipakai untuk triwulan sebelumnya. Triwulan: I Jan-Mar, II Apr-Jun, III Jul-Sep, IV Okt-Des.</p>
         </div>)}
+      {rup && rup.contracts.length > 0 && (
+        <div className="space-y-1 rounded-xl border border-slate-200 p-3">
+          <label className="block text-sm font-medium">Untuk dokumen kontrak/SP <span className="font-normal text-slate-500">(opsional; agar sisa nilai tiap SP terpantau)</span>
+            <select name="contract_id" value={contractId} onChange={(e) => setContractId(e.target.value)} className={cls}><option value="">(tidak ditautkan ke dokumen)</option>
+              {rup.contracts.map((c) => <option key={c.id} value={c.id}>{c.label}{c.value ? ` · nilai ${f(c.value)}` : ""}{c.remaining !== null ? ` · sisa ${f(c.remaining)}` : ""}</option>)}</select></label>
+          {contract && <p className={`text-xs ${contractOver ? "font-semibold text-red-700" : "text-slate-600"}`}>{contract.value ? `Nilai dokumen ${f(contract.value)}, terbayar ${f(contract.paid)}, sisa ${f(contract.remaining ?? "0")}.` : `Dokumen tanpa nilai; terbayar ${f(contract.paid)}.`}{contractOver && " Nilai melebihi sisa dokumen, akan ditolak."}</p>}
+        </div>)}
+      {rup?.recurring && usePct !== null && <p role="status" className={`alert text-sm ${usePct >= 100 ? "alert-error" : usePct >= 80 ? "alert-warn" : "alert-info"}`}>Paket berulang: setelah transaksi ini pagu RUP terpakai <b>{usePct.toFixed(1).replace(".", ",")}%</b> ({f(rup.realized)} terpakai sebelumnya dari pagu {f(rup.pagu)}).{usePct >= 100 ? " Melebihi pagu paket: akan ditolak." : usePct >= 80 ? " Sisa pagu menipis; pertimbangkan sisa kebutuhan sampai akhir tahun." : ""}</p>}
       <div className="space-y-2 rounded-xl border border-slate-200 p-3">
         <p className="text-sm font-medium">4. Penyedia pelaksana pekerjaan <span className="font-normal text-slate-500">(untuk pengadaan; boleh menyusul)</span></p>
         <div className="grid gap-3 lg:grid-cols-2">
@@ -114,6 +124,6 @@ export function TransactionForm({ year, entries, rups, methods, providers, alloc
             {payDate ? <> Diakui sebagai realisasi (SPM/SP2D {payDate}).</> : <> Belum diakui sebagai realisasi (menunggu tanggal SPM/SP2D).</>}</p></div>)}
       {s.error && <p role="alert" className="alert alert-error">{s.error}</p>}
       {s.ok && <p role="status" className="alert alert-ok">Tersimpan. Sisa pagu dan kas sudah diperbarui. RUP, rekening, tanggal, metode, dan penyedia dipertahankan agar input berikutnya cepat; ubah bila berbeda.</p>}
-      <button disabled={pending || !!over || outOfYear || payOut || (!!date && !stageW) || noStageMatch || noStageRup || (!!amount && val === null)} className="btn btn-primary">{pending ? "Menyimpan..." : "Simpan realisasi"}</button>
+      <button disabled={pending || !!over || contractOver || outOfYear || payOut || (!!date && !stageW) || noStageMatch || noStageRup || (!!amount && val === null)} className="btn btn-primary">{pending ? "Menyimpan..." : "Simpan realisasi"}</button>
     </form>);
 }

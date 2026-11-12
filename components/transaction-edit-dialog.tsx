@@ -7,11 +7,12 @@ import { toCents } from "@/lib/money";
 import { formatRupiah } from "@/lib/format";
 import { checkTransactionInput, payDateOutOfYear } from "@/lib/realization-checks";
 import { ConfirmButton } from "@/components/confirm-button";
-export type EditRow = { id: string; transaction_date: string; amount: string; payment_date: string | null; payment_number: string | null; description: string | null; rup_code: string | null; method_id: string | null; provider_id: string | null; notes: string | null };
+export type EditRow = { id: string; transaction_date: string; amount: string; payment_date: string | null; payment_number: string | null; description: string | null; contract_id: string | null; rup_code: string | null; method_id: string | null; provider_id: string | null; notes: string | null };
 type Opt = { id: string; name: string };
+type CO = { id: string; label: string; value: string | null; paid: string; remaining: string | null };
 const cls = "mt-1 w-full";
 
-function EditForm({ row, info, methods, providers, year, close }: { row: EditRow; info: string[]; methods: Opt[]; providers: Opt[]; year: number; close: () => void }) {
+function EditForm({ row, info, methods, providers, contracts, year, close }: { row: EditRow; info: string[]; methods: Opt[]; providers: Opt[]; contracts: CO[]; year: number; close: () => void }) {
   const [s, action, pending] = useActionState<FormState, FormData>(saveTransaction, {});
   const [d, delAction, deleting] = useActionState<FormState, FormData>(removeTransaction, {});
   const [date, setDate] = useState(row.transaction_date), [amount, setAmount] = useState(parseRupiah(row.amount) ?? row.amount), [payDate, setPayDate] = useState(row.payment_date ?? "");
@@ -33,6 +34,7 @@ function EditForm({ row, info, methods, providers, year, close }: { row: EditRow
           <label className="block text-sm font-medium">Kode RUP<input name="rup_code" maxLength={50} inputMode="numeric" value={rup} onChange={(e) => setRup(e.target.value)} autoComplete="off" className={cls} /><span className="text-xs font-normal text-slate-500">Kosongkan untuk belanja non-pengadaan.</span></label>
           <label className="block text-sm font-medium">Metode pemilihan<select name="method_id" value={method} onChange={(e) => setMethod(e.target.value)} className={cls}><option value="">(kosong / ikut rencana RUP)</option>{methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
           <label className="block text-sm font-medium sm:col-span-2">Penyedia pelaksana<select name="provider_id" value={prov} onChange={(e) => setProv(e.target.value)} className={cls}><option value="">(belum dipilih)</option>{providers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+          {contracts.length > 0 && <label className="block text-sm font-medium sm:col-span-2">Dokumen kontrak/SP<select name="contract_id" defaultValue={row.contract_id ?? ""} className={cls}><option value="">(tidak ditautkan ke dokumen)</option>{contracts.map((c) => <option key={c.id} value={c.id}>{c.label}{c.value ? ` · nilai ${formatRupiah(c.value)}` : ""}{c.remaining !== null ? ` · sisa ${formatRupiah(c.remaining)}` : ""}</option>)}</select></label>}
           <label className="block text-sm font-medium sm:col-span-2">Uraian / keperluan<input name="description" maxLength={300} defaultValue={row.description ?? ""} autoComplete="off" className={cls} /></label>
           <label className="block text-sm font-medium sm:col-span-2">Catatan<input name="notes" maxLength={500} defaultValue={row.notes ?? ""} autoComplete="off" className={cls} /></label>
         </div>
@@ -48,7 +50,7 @@ function EditForm({ row, info, methods, providers, year, close }: { row: EditRow
 }
 
 /** Tombol "Ubah" yang membuka dialog berisi formulir lengkap; galat tampil di dalam dialog dan filter/halaman daftar tetap. */
-export function TransactionEditDialog({ row, info, methods, providers, year }: { row: EditRow; info: string[]; methods: Opt[]; providers: Opt[]; year: number }) {
+export function TransactionEditDialog({ row, info, methods, providers, contracts, year }: { row: EditRow; info: string[]; methods: Opt[]; providers: Opt[]; contracts: CO[]; year: number }) {
   const [open, setOpen] = useState(false), ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const d = ref.current; if (!d) return; if (open && !d.open) d.showModal(); if (!open && d.open) d.close(); }, [open]);
   return (
@@ -56,7 +58,7 @@ export function TransactionEditDialog({ row, info, methods, providers, year }: {
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} aria-haspopup="dialog">Ubah</button>
       <dialog ref={ref} onClose={() => setOpen(false)} aria-labelledby={`ed-${row.id}`} className="w-[min(40rem,94vw)] rounded-2xl border border-slate-200 p-0 shadow-xl backdrop:bg-slate-900/40">
         {open && <div className="space-y-3 p-5"><div><h2 id={`ed-${row.id}`} className="font-semibold">Ubah transaksi</h2>{info.map((t) => <p key={t} className="text-xs text-slate-600">{t}</p>)}</div>
-          <EditForm row={row} info={info} methods={methods} providers={providers} year={year} close={() => setOpen(false)} /></div>}
+          <EditForm row={row} info={info} methods={methods} providers={providers} contracts={contracts} year={year} close={() => setOpen(false)} /></div>}
       </dialog>
     </>);
 }
