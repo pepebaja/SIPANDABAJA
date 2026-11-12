@@ -7,7 +7,8 @@ import { getSession } from "@/lib/server/session";
 import { loadStageVersions } from "@/lib/server/stage-versions";
 import { can } from "@/lib/rbac";
 import { parseRupiah } from "@/lib/import/parse";
-import { toCents } from "@/lib/money";
+import { fromCents, sumCents, toCents } from "@/lib/money";
+import { formatRupiah } from "@/lib/format";
 import { transactionSaveSchema, transactionSchema } from "@/lib/transactions";
 import { referenceDate, resolveVersion } from "@/lib/stage-rule";
 import { mapEntryToVersion } from "@/lib/server/stage-map";
@@ -42,6 +43,10 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   dup = rupId ? dup.eq("rup_package_id", rupId) : dup.is("rup_package_id", null);
   dup = d.description ? dup.eq("description", d.description) : dup.is("description", null);   // uraian berbeda = transaksi berbeda (mis. dua konsumsi rapat pada hari dan nilai yang sama)
   if (((await dup).count ?? 0) > 0) return { error: "Transaksi dengan tanggal, rekening, kode RUP, nilai, dan uraian yang sama sudah tercatat. Jika ini pembelian yang berbeda, bedakan uraiannya; untuk melengkapi No SPM/SP2D, ubah lewat Daftar transaksi." };
+  if (d.contract_id) {
+    const { data: rr } = rupId ? await sb.from("rup_packages").select("rup_code").eq("id", rupId).maybeSingle() : { data: null };
+    const msg = await checkContract(sb, d.contract_id, rr?.rup_code ?? null, d.amount); if (msg) return { error: msg };
+  }
   // Penyedia: pilih dari master, atau ketik nama baru (dicocokkan tanpa membedakan huruf/spasi/tanda baca agar tidak dobel).
   const { new_provider_name, ...row } = d; let providerId = row.provider_id;
   if (providerId) { const { data: pv } = await sb.from("providers").select("is_active").eq("id", providerId).maybeSingle(); if (!pv?.is_active) return { error: "Penyedia yang dipilih tidak ditemukan atau nonaktif." }; }
@@ -51,6 +56,7 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
     providerId = r.data as string;
   }
   if (!row.description) delete (row as { description?: unknown }).description;
+  if (!row.contract_id) delete (row as { contract_id?: unknown }).contract_id;   // kompatibel bila migrasi 20260123 belum dijalankan
   const { error } = await sb.from("transactions").insert({ ...row, budget_entry_id: entryId, rup_package_id: rupId, provider_id: providerId, budget_version_id: ver.id });
   if (error?.code === "P0001") return { error: error.message };
   if (error?.code === "23502" || error?.code === "42703" || error?.message?.includes("schema cache")) return { error: MIGRASI };
@@ -58,6 +64,18 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   revalidatePath("/realisasi"); revalidatePath("/rup");
   return { ok: true };
 }
+/** Pembayaran pada dokumen kontrak/SP: dokumen harus milik paket dengan kode RUP yang sama dan total terbayar tidak boleh melampaui nilai dokumen (dokumen tanpa nilai tidak dibatasi). */
+async function checkContract(sb: Awaited<ReturnType<typeof createClient>>, contractId: string, rupCode: string | null, amount: string, excludeTxId?: string): Promise<string | null> {
+  const { data: c } = await sb.from("contracts_or_orders").select("id, contract_value, lineage_id, procurement_packages(internal_code)").eq("id", contractId).maybeSingle() as { data: any };
+  if (!c) return "Dokumen kontrak/SP tidak ditemukan.";
+  if (rupCode && c.procurement_packages?.internal_code !== rupCode) return "Dokumen SP yang dipilih bukan milik paket dengan kode RUP ini.";
+  const value = parseRupiah(c.contract_value); if (toCents(amount) <= 0n || value === null || toCents(value) <= 0n) return null;
+  const { data: fam } = await sb.from("contracts_or_orders").select("id").eq("lineage_id", c.lineage_id ?? c.id);
+  let q = sb.from("transactions").select("amount").in("contract_id", (fam ?? [{ id: c.id }]).map((x: { id: string }) => x.id)); if (excludeTxId) q = q.neq("id", excludeTxId);
+  const { data: tx } = await q, paid = sumCents((tx ?? []).map((t: { amount: unknown }) => parseRupiah(t.amount) ?? "0.00")), left = toCents(value) - paid;
+  return paid + toCents(amount) > toCents(value) ? `Melebihi nilai dokumen SP. Sisa nilai dokumen: ${formatRupiah(fromCents(left > 0n ? left : 0n))}.` : null;
+}
+
 const NO_AUTH = "Anda tidak berwenang mengubah realisasi (hanya Super Admin, Admin OPD, dan PPBJ).";
 /**
  * Menyimpan perubahan satu transaksi dari dialog "Ubah" (hasil dan galat ditampilkan di dalam dialog, filter/halaman daftar tidak hilang).
@@ -78,6 +96,8 @@ export async function saveTransaction(_p: FormState, fd: FormData): Promise<Form
   if (!same(d.payment_number, row.payment_number)) patch.payment_number = d.payment_number;
   if (!same(d.notes, row.notes)) patch.notes = d.notes;
   if (!same(d.description, row.description)) patch.description = d.description;
+  if (!same(d.contract_id, row.contract_id)) patch.contract_id = d.contract_id;
+  if (d.contract_id && ("contract_id" in patch || "amount" in patch)) { const msg = await checkContract(sb, d.contract_id, d.rup_code, patch.amount ? d.amount : (parseRupiah(row.amount) ?? d.amount), d.id); if (msg) return { error: msg }; }
   if (!same(d.provider_id, row.provider_id)) patch.provider_id = d.provider_id;
   let targetVid = row.budget_version_id as string;
   if ("transaction_date" in patch || "payment_date" in patch) {

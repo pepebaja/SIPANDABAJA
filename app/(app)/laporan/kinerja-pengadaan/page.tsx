@@ -19,7 +19,7 @@ export default async function KinerjaPengadaanPage() {
   const versions = await loadStageVersions(sb, ctx.yearId), curV = versions.find((v) => v.id === vid);
   const vids = versions.filter((v) => v.id === vid || (curV && v.sortOrder < curV.sortOrder)).map((v) => v.id);   // realisasi kumulatif tahapan
   const [pk, ct, st, rups, rtx] = await Promise.all([
-    fetchAll<any>((f, t) => sb.from("procurement_packages").select("id, internal_code, name, pagu, status, due_date, handover_date, process_start, process_end, obstacle_category, rup_package_id, ppbj:officials!ppbj_id(name), method:procurement_methods(code, name), rup:rup_packages(rup_code, name, pagu, planned:procurement_methods!planned_method_id(code, name))").eq("budget_version_id", vid).order("internal_code").range(f, t)),
+    fetchAll<any>((f, t) => sb.from("procurement_packages").select("id, internal_code, name, pagu, status, due_date, handover_date, process_start, process_end, obstacle_category, is_recurring, rup_package_id, ppbj:officials!ppbj_id(name), method:procurement_methods(code, name), rup:rup_packages(rup_code, name, pagu, planned:procurement_methods!planned_method_id(code, name))").eq("budget_version_id", vid).order("internal_code").range(f, t)),
     fetchAll<any>((f, t) => sb.from("contracts_or_orders").select("id, procurement_package_id, contract_value, procurement_packages!inner(budget_version_id)").eq("procurement_packages.budget_version_id", vid).order("id").range(f, t)),
     sb.from("package_statuses").select("code, name, stage_group"),
     fetchAll<any>((f, t) => sb.from("rup_packages").select("id, rup_code, name, pagu, planned:procurement_methods!planned_method_id(code, name)").eq("budget_version_id", vid).order("rup_code").range(f, t)),
@@ -29,7 +29,7 @@ export default async function KinerjaPengadaanPage() {
   const sm = new Map((st.data ?? []).map((x: any) => [x.code, x])), cv = new Map<string, bigint>(), has = new Set<string>();
   for (const c of ct) { const v = parseRupiah(c.contract_value); if (v === null) continue; has.add(c.procurement_package_id); cv.set(c.procurement_package_id, (cv.get(c.procurement_package_id) ?? 0n) + BigInt(v.replace(".", ""))); }
   const pkgs: PerfPackage[] = pk.map((p) => ({ id: p.id, code: p.internal_code, name: p.name, officer: p.ppbj?.name ?? null, pagu: parseRupiah(p.pagu) ?? "0.00", status: p.status, statusName: sm.get(p.status)?.name ?? p.status, group: sm.get(p.status)?.stage_group ?? null,
-    due: p.due_date, handover: p.handover_date, start: p.process_start, end: p.process_end, obstacle: p.obstacle_category,
+    due: p.due_date, recurring: !!p.is_recurring, handover: p.handover_date, start: p.process_start, end: p.process_end, obstacle: p.obstacle_category,
     contract: has.has(p.id) ? `${(cv.get(p.id) ?? 0n) / 100n}.${String((cv.get(p.id) ?? 0n) % 100n).padStart(2, "0")}` : null }));
   const NONE = "Belum ditentukan", linked = new Set(pk.map((p: any) => p.rup_package_id).filter(Boolean));
   const epItems: EpItem[] = [

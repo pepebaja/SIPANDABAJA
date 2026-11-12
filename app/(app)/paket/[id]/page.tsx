@@ -6,6 +6,7 @@ import { rp } from "@/lib/format";
 import { changeStatus, linkRup, updateDue, updateOfficials, updatePackageMeta } from "./actions";
 import { contractProfile, DOC_LABEL, JENIS_LABEL, methodKind } from "@/lib/procurement-profile";
 import { loadPackageExecutions } from "@/lib/server/package-executions";
+import { loadContractOptions } from "@/lib/server/contract-options";
 import { summarizeExecutions } from "@/lib/package-executions";
 import { parseRupiah } from "@/lib/import/parse";
 import { fromCents, sumCents } from "@/lib/money";
@@ -24,6 +25,7 @@ export default async function PackageDetail({ params, searchParams }: { params: 
     sb.from("officials").select("id, name, nip, official_type").eq("is_active", true).order("name").limit(1000),
     sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name"),
     loadPackageExecutions(sb, p)]);
+  const optById = new Map(((await loadContractOptions(sb, p.budget_version_id).catch(() => ({}))) as Record<string, { id: string; paid: string; remaining: string | null }[]>)[p.internal_code]?.map((o) => [o.id, o]) ?? []);
   const kind = methodKind(p.method), profile = contractProfile(kind), sum = summarizeExecutions(exec, parseRupiah(p.pagu) ?? "0.00"), last = exec[exec.length - 1];
   const contractTotal = fromCents(sumCents((ct.data ?? []).map((c) => parseRupiah(c.contract_value) ?? "0.00")));
   const ofs = (t: string) => (off.data ?? []).filter((o) => o.official_type === t);
@@ -57,9 +59,9 @@ export default async function PackageDetail({ params, searchParams }: { params: 
         <label className="text-sm font-medium">Target selesai (tenggat)<input type="date" name="due_date" defaultValue={p.due_date ?? ""} className="ml-2 py-1.5" /></label><button className="btn btn-dark btn-sm">Simpan tenggat</button>
         <p className="w-full text-xs text-slate-600">Mulai proses: <b>{p.process_start ?? "-"}</b> · Selesai proses: <b>{p.process_end ?? "-"}</b> · Serah terima: <b>{p.handover_date ?? "-"}</b>. Ketiganya terisi otomatis saat status diubah.</p></form>
       <div className="space-y-3"><h2 className="font-semibold">Kontrak / SP / dokumen pelaksanaan</h2><p className="text-xs text-slate-600">Nilai di sini bukan realisasi keuangan. Realisasi dicatat terpisah berdasarkan dokumen pembayaran.</p>
-        {ct.data?.length ? <div className="table-wrap"><table><thead><tr><th>Bentuk</th><th>Nomor</th><th>Tanggal</th><th>Penyedia</th><th>Uraian</th><th className="text-right">Hasil pemilihan</th><th className="text-right">Nilai</th></tr></thead>
-          <tbody>{ct.data.map((c: any) => <tr key={c.id}><td>{DOC_LABEL[c.doc_type as keyof typeof DOC_LABEL] ?? c.doc_type}</td><td>{c.doc_number ?? "-"}</td><td>{c.doc_date ?? "-"}</td><td>{c.provider?.name ?? "-"}</td><td>{c.description ?? "-"}</td><td className="text-right">{rp(c.selection_result_value)}</td><td className="text-right">{rp(c.contract_value)}</td></tr>)}</tbody>
-          {ct.data.length > 1 && <tfoot><tr className="font-semibold"><td colSpan={6}>Total {ct.data.length} dokumen</td><td className="px-3.5 py-3 text-right">{rp(contractTotal)}</td></tr></tfoot>}</table></div> : <p className="text-sm text-slate-600">Belum ada dokumen kontrak/SP.</p>}
+        {ct.data?.length ? <div className="table-wrap"><table><thead><tr><th>Bentuk</th><th>Nomor</th><th>Tanggal</th><th>Penyedia</th><th>Uraian</th><th className="text-right">Hasil pemilihan</th><th className="text-right">Nilai</th><th className="text-right">Terbayar</th><th className="text-right">Sisa</th></tr></thead>
+          <tbody>{ct.data.map((c: any) => <tr key={c.id}><td>{DOC_LABEL[c.doc_type as keyof typeof DOC_LABEL] ?? c.doc_type}</td><td>{c.doc_number ?? "-"}</td><td>{c.doc_date ?? "-"}</td><td>{c.provider?.name ?? "-"}</td><td>{c.description ?? "-"}</td><td className="text-right">{rp(c.selection_result_value)}</td><td className="text-right">{rp(c.contract_value)}</td><td className="text-right tabular-nums">{optById.has(c.id) ? rp(optById.get(c.id)!.paid) : "-"}</td><td className={`text-right tabular-nums ${optById.get(c.id)?.remaining?.startsWith("-") ? "text-red-700" : ""}`}>{optById.get(c.id)?.remaining != null ? rp(optById.get(c.id)!.remaining) : "-"}</td></tr>)}</tbody>
+          {ct.data.length > 1 && <tfoot><tr className="font-semibold"><td colSpan={6}>Total {ct.data.length} dokumen</td><td className="px-3.5 py-3 text-right">{rp(contractTotal)}</td><td colSpan={2} /></tr></tfoot>}</table></div> : <p className="text-sm text-slate-600">Belum ada dokumen kontrak/SP.</p>}
         <ContractForm packageId={id} providers={(prov.data ?? []).map((r) => ({ value: r.id, label: r.name }))} profile={profile} methodName={p.method?.name ?? null} recurring={!!p.is_recurring} /></div>
       <div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Rincian pelaksanaan (realisasi)</h2>
         <Link className="btn btn-ghost btn-sm" href={`/realisasi?tab=manual&rup=${encodeURIComponent(p.internal_code)}${last?.description ? `&uraian=${encodeURIComponent(last.description)}` : ""}`}>+ Catat pelaksanaan baru</Link></div>

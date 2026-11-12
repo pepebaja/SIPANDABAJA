@@ -24,6 +24,7 @@ import { CEK_OPTIONS, applyScopeFilter, applyTxFilter, hasScopeFilter, hasTxFilt
 import { resetTransactions } from "./actions";
 import { TransactionEditDialog } from "@/components/transaction-edit-dialog";
 import { rowIssues } from "@/lib/realization-issues";
+import { loadContractOptions } from "@/lib/server/contract-options";
 import { deleteTxImportJob } from "./unggah-actions";
 
 export const maxDuration = 60; // unggahan besar (pratinjau + penerapan) membutuhkan beberapa detik
@@ -47,7 +48,7 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
 
 // ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
 // Relasi bersarang !inner agar filter program/kegiatan/sub kegiatan dapat diterapkan langsung di database (tanpa daftar ID panjang pada URL).
-const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), description, budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts!inner(code)), rup_packages(rup_code)";
+const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), description, contract_id, budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts!inner(code)), rup_packages(rup_code)";
 const SUM_SEL = "amount, payment_date, budget_entries!inner(subactivity_id, account_id, expenditure_accounts!inner(code), subactivities!inner(activity_id, activities!inner(program_id)))";
 /** Ringkasan sesuai filter: pagu rekening pada cakupan program/kegiatan/sub kegiatan (tahapan terpilih) dan transaksi yang lolos SEMUA filter (kumulatif), sehingga kartu di atas sama dengan isi daftar. */
 async function filteredTotals(sb: SupabaseClient, vid: string, yearId: string, f: TxFilter, fullPagu: string): Promise<Derived> {
@@ -69,13 +70,14 @@ async function DaftarTab({ sb, vid, yearId, year, sp, canWrite, summary }: { sb:
     fetchAll<any>((a, b) => sb.from("expenditure_accounts").select("id, code, name").order("code").range(a, b)),
     canWrite ? fetchAll<any>((a, b) => sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[]),
     canWrite ? fetchAll<any>((a, b) => sb.from("providers").select("id, name").eq("is_active", true).order("name").range(a, b)) : Promise.resolve([] as any[])]);
+  const contractsByCode: Awaited<ReturnType<typeof loadContractOptions>> = canWrite ? await loadContractOptions(sb, vid).catch(() => ({})) : {}, contractLabel = new Map(Object.values(contractsByCode).flat().map((c) => [c.id, c.label]));
   const cur = versions.find((v) => v.id === vid);
   const ids = versions.filter((v) => v.id === vid || (cur && v.sortOrder < cur.sortOrder)).map((v) => v.id), stageOf = new Map(versions.map((v) => [v.id, v.stageName]));
   const scope = ids.length ? ids : [vid];
   const listQ = applyTxFilter(sb.from("transactions").select(SEL, { count: "exact" }).in("budget_version_id", scope), f)
     .order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
   let tx: any = await listQ;
-  if (tx.error) tx = await applyTxFilter(sb.from("transactions").select(SEL.replace(", description", ""), { count: "exact" }).in("budget_version_id", scope), f).order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);   // kolom uraian belum ada (migrasi 20260122)
+  if (tx.error) tx = await applyTxFilter(sb.from("transactions").select(SEL.replace(", description, contract_id", ""), { count: "exact" }).in("budget_version_id", scope), f).order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);   // kolom uraian belum ada (migrasi 20260122)
   const rows: any[] = tx.data ?? [], total = tx.count ?? 0, pages = Math.max(1, Math.ceil(total / PAGE));
   const qs = (o: Record<string, string>) => new URLSearchParams({ tab: "daftar", ...Object.fromEntries(Object.entries(o).filter(([, v]) => v)) });
   const pageHref = (p: number) => `/realisasi?${qs({ ...txFilterParams(f), page: String(p) })}`;
@@ -96,11 +98,11 @@ async function DaftarTab({ sb, vid, yearId, year, sp, canWrite, summary }: { sb:
               <td className="min-w-64 text-sm"><span className="font-medium">{sa ? `${sa.code} ${sa.name}` : "-"}</span><span className="block text-xs text-slate-700">{be?.expenditure_accounts?.code}: {be?.description}</span>
                 <span className="block text-xs text-slate-500">{pg ? `Program ${pg.code}` : ""}{ac ? ` · Kegiatan ${ac.code}` : ""}</span></td>
               <td className="min-w-32 text-sm">{r.payment_date ? <>{fmtDate(r.payment_date)}<span className="block text-xs text-slate-600">{r.payment_number ?? "-"}</span></> : <span className="text-slate-500">belum diakui</span>}</td>
-              <td className="min-w-44 text-sm">{rupCode ? <>RUP {rupCode}</> : <span className="text-slate-500">{methodName ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{methodName && <span className="block text-xs text-slate-600">{methodName}</span>}{provName && <span className="block text-xs text-slate-800">{provName}</span>}{r.description && <span className="block text-xs italic text-slate-700">{r.description}</span>}</td>
+              <td className="min-w-44 text-sm">{rupCode ? <>RUP {rupCode}</> : <span className="text-slate-500">{methodName ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{methodName && <span className="block text-xs text-slate-600">{methodName}</span>}{provName && <span className="block text-xs text-slate-800">{provName}</span>}{r.description && <span className="block text-xs italic text-slate-700">{r.description}</span>}{r.contract_id && <span className="block text-xs text-slate-600">Dokumen: {contractLabel.get(r.contract_id) ?? "kontrak/SP tertaut"}</span>}</td>
               <td className={`whitespace-nowrap text-right tabular-nums ${Number(r.amount) < 0 ? "text-amber-800" : ""}`}>{rp(r.amount)}{Number(r.amount) < 0 && <span className="block text-xs">koreksi</span>}</td>
               <td className="min-w-40 text-xs">{issues.length ? <ul className="space-y-0.5">{issues.map((t) => <li key={t} className="text-amber-800">• {t}</li>)}</ul> : <span className="text-emerald-700">Lengkap</span>}</td>
-              {canWrite && <td className="whitespace-nowrap"><TransactionEditDialog year={year} info={info} methods={methods} providers={provs}
-                row={{ id: r.id, transaction_date: r.transaction_date, amount: String(r.amount), payment_date: r.payment_date, payment_number: r.payment_number, description: r.description ?? null, rup_code: rupCode, method_id: r.procurement_method_id, provider_id: r.provider_id, notes: r.notes }} /></td>}</tr>); })}</tbody></table></div>)}
+              {canWrite && <td className="whitespace-nowrap"><TransactionEditDialog year={year} info={info} methods={methods} providers={provs} contracts={rupCode ? (contractsByCode[rupCode] ?? []) : []}
+                row={{ id: r.id, transaction_date: r.transaction_date, amount: String(r.amount), payment_date: r.payment_date, payment_number: r.payment_number, description: r.description ?? null, contract_id: r.contract_id ?? null, rup_code: rupCode, method_id: r.procurement_method_id, provider_id: r.provider_id, notes: r.notes }} /></td>}</tr>); })}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="link" href={pageHref(page - 1)}>Sebelumnya</Link>}<span>{total} transaksi · halaman {page} dari {pages}</span>{page < pages && <Link className="link" href={pageHref(page + 1)}>Berikutnya</Link>}</nav>
     </div>);
 }
