@@ -93,15 +93,17 @@ describe("simpan perubahan transaksi", () => {
 
 import { packageEditSchema } from "@/lib/packages";
 describe("ubah paket pengadaan", () => {
-  const id = "11111111-2222-3333-4444-555555555555", base = { id, name: "  Belanja Jasa  ", pagu: "130.000.000,00", execution_mode: "penyedia", status: "RENCANA", method_id: "", ppbj_id: "", ppk_id: "", pptk_id: "", due_date: "" };
+  const id = "11111111-2222-3333-4444-555555555555", base = { id, name: "  Belanja Jasa  ", pagu: "130.000.000,00", execution_mode: "penyedia", procurement_type: "barang", status: "RENCANA", method_id: "", ppbj_id: "", ppk_id: "", pptk_id: "", due_date: "" };
   it("menormalkan isian dan menganggap pejabat/tenggat kosong sebagai dihapus", () => {
-    expect(packageEditSchema.parse(base)).toMatchObject({ name: "Belanja Jasa", pagu: "130000000.00", method_id: null, ppbj_id: null, ppk_id: null, pptk_id: null, due_date: null });
+    expect(packageEditSchema.parse(base)).toMatchObject({ name: "Belanja Jasa", pagu: "130000000.00", method_id: null, ppbj_id: null, ppk_id: null, pptk_id: null, due_date: null, procurement_type: "barang", is_recurring: false });
+    expect(packageEditSchema.parse({ ...base, is_recurring: "on", procurement_type: "jasa_lainnya" })).toMatchObject({ is_recurring: true, procurement_type: "jasa_lainnya" });
   });
   it("menolak nama kosong, pagu negatif/tidak valid, mode tidak dikenal, dan tanggal salah", () => {
     expect(packageEditSchema.safeParse({ ...base, name: " " }).success).toBe(false);
     expect(packageEditSchema.safeParse({ ...base, pagu: "-1" }).success).toBe(false);
     expect(packageEditSchema.safeParse({ ...base, pagu: "abc" }).success).toBe(false);
     expect(packageEditSchema.safeParse({ ...base, execution_mode: "lainnya" }).success).toBe(false);
+    expect(packageEditSchema.safeParse({ ...base, procurement_type: "lain" }).success).toBe(false);
     expect(packageEditSchema.safeParse({ ...base, due_date: "05/11/2026" }).success).toBe(false);
   });
 });
@@ -117,4 +119,17 @@ describe("peringkat penyedia", () => {
     expect(rankProviders(list, "packages").map((r) => [r.rank, r.name])).toEqual([[1, "PT C"], [2, "PT A"], [3, "PT B"], [4, "PT D"]]);
   });
   it("daftar kosong", () => expect(rankProviders([], "contract")).toEqual([]));
+});
+
+import { summarizeExecutions } from "@/lib/package-executions";
+describe("rincian pelaksanaan paket berulang", () => {
+  const x = (id: string, amount: string, pay: string | null, d = "uraian") => ({ id, date: "2026-05-01", amount, paymentDate: pay, paymentNumber: null, description: d, provider: "PT A" });
+  it("menjumlah pelaksanaan, yang diakui, dan sisa pagu paket", () => {
+    const s = summarizeExecutions([x("1", "300.00", "2026-05-02"), x("2", "300.00", null), x("3", "-50.00", "2026-05-03")], "1000.00");
+    expect(s).toEqual({ count: 3, total: "550.00", recognized: "250.00", unrecognized: "300.00", remaining: "450.00", pct: "55.00" });
+  });
+  it("tanpa pelaksanaan atau pagu nol", () => {
+    expect(summarizeExecutions([], "1000.00")).toMatchObject({ count: 0, total: "0.00", remaining: "1000.00", pct: "0.00" });
+    expect(summarizeExecutions([x("1", "10.00", null)], "0.00").pct).toBeNull();
+  });
 });
