@@ -3,10 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAll } from "./fetch-all";
 import { parseRupiah } from "@/lib/import/parse";
 import { loadStageVersions } from "./stage-versions";
+import { loadContractOptions, type ContractOpt } from "./contract-options";
 import { stageWindows, type StageWindow } from "@/lib/stage-rule";
 
 export type FormEntry = { id: string; prog: string; act: string; sub: string; acc: string; fund: string; pptk: string; desc: string; pagu: string; cash: (string | null)[]; realized: string[] };
-export type FormRup = { id: string; code: string; name: string; pagu: string; realized: string; methodId: string | null; providerId: string | null };
+export type FormRup = { id: string; code: string; name: string; pagu: string; realized: string; methodId: string | null; providerId: string | null; recurring: boolean; contracts: ContractOpt[] };
 export type FormProvider = { id: string; name: string };
 export type FormMethod = { id: string; name: string };
 /** Batas per tahapan untuk SATU rekening (padanan rekening layar pada tahapan itu) dan per kode RUP. null = rekening tidak ada pada tahapan itu. */
@@ -28,6 +29,9 @@ export async function loadRealizationForm(sb: SupabaseClient, versionId: string,
     fetchAll<any>((f, t) => sb.from("package_budget_allocations").select("id, rup_package_id, budget_entry_id, rup_packages!inner(budget_version_id)").eq("rup_packages.budget_version_id", versionId).order("id").range(f, t)),
     fetchAll<any>((f, t) => sb.from("providers").select("id, name").eq("is_active", true).order("name").range(f, t)),
     fetchAll<any>((f, t) => sb.from("contracts_or_orders").select("id, provider_id, procurement_packages!inner(budget_version_id, rup_package_id)").not("provider_id", "is", null).eq("procurement_packages.budget_version_id", versionId).order("id").range(f, t))]);
+  const [contractOpts, recurRows] = await Promise.all([loadContractOptions(sb, versionId).catch(() => ({} as Record<string, ContractOpt[]>)),
+    fetchAll<any>((f, t) => sb.from("procurement_packages").select("rup_package_id, is_recurring").eq("budget_version_id", versionId).eq("is_recurring", true).not("rup_package_id", "is", null).order("id").range(f, t)).catch(() => [] as any[])]);
+  const recurring = new Set<string>(recurRows.map((r) => r.rup_package_id as string));
   const provByRup = new Map<string, string>(); for (const c of contracts) { const r = c.procurement_packages?.rup_package_id; if (r && !provByRup.has(r)) provByRup.set(r, c.provider_id); }   // penyedia pada kontrak paket menjadi usulan awal
   const cashBy = new Map<string, (string | null)[]>(), realBy = new Map<string, string[]>();
   for (const c of cash) { const a = cashBy.get(c.budget_entry_id) ?? [null, null, null, null]; a[c.period_quarter - 1] = m(c.planned_amount); cashBy.set(c.budget_entry_id, a); }
@@ -39,7 +43,7 @@ export async function loadRealizationForm(sb: SupabaseClient, versionId: string,
     pagu: m(e.amount), cash: cashBy.get(e.id) ?? [null, null, null, null], realized: realBy.get(e.id) ?? ["0.00", "0.00", "0.00", "0.00"] }));
   entries.sort((a, b) => cmp(a.sub, b.sub) || cmp(a.acc, b.acc) || cmp(a.desc, b.desc));
   const rr = new Map<string, string>(byRup.map((r: any) => [r.rup_id, m(r.amount)]));
-  const rupList: FormRup[] = rups.map((r: any) => ({ id: r.id, code: r.rup_code, name: r.name, pagu: m(r.pagu), realized: rr.get(r.id) ?? "0.00", methodId: r.planned_method_id ?? null, providerId: provByRup.get(r.id) ?? null }));
+  const rupList: FormRup[] = rups.map((r: any) => ({ id: r.id, code: r.rup_code, name: r.name, pagu: m(r.pagu), realized: rr.get(r.id) ?? "0.00", methodId: r.planned_method_id ?? null, providerId: provByRup.get(r.id) ?? null, recurring: recurring.has(r.id), contracts: contractOpts[r.rup_code] ?? [] }));
   const allocByRup: Record<string, string[]> = {};
   for (const a of alloc) (allocByRup[a.rup_package_id] ??= []).push(a.budget_entry_id);
   const methodList: FormMethod[] = methods.map((m: any) => ({ id: m.id, name: m.name }));

@@ -2,7 +2,7 @@ import { fromCents, percent, toCents } from "./money";
 
 export type PerfPackage = {
   id: string; code: string; name: string; officer: string | null; pagu: string; status: string; statusName: string; group: string | null;
-  due: string | null; handover: string | null; start: string | null; end: string | null; obstacle: string | null; contract: string | null;
+  due: string | null; recurring?: boolean; handover: string | null; start: string | null; end: string | null; obstacle: string | null; contract: string | null;
 };
 export type OfficerStat = {
   officer: string; total: number; pagu: string; contract: string; saving: string; selesai: number; diproses: number; persiapan: number; batalTunda: number;
@@ -22,7 +22,7 @@ export function progressOf(p: Pick<PerfPackage, "status" | "group">): "selesai" 
   return "persiapan";
 }
 /** Paket terlambat = lewat tenggat, belum selesai/batal/tunda. today berformat YYYY-MM-DD. */
-export const isOverdue = (p: PerfPackage, today: string) => !!p.due && p.due < today && ["persiapan", "diproses"].includes(progressOf(p));
+export const isOverdue = (p: PerfPackage, today: string) => !p.recurring && !!p.due && p.due < today && ["persiapan", "diproses"].includes(progressOf(p));
 
 function stat(officer: string, ps: PerfPackage[], today: string): OfficerStat {
   let pagu = 0n, contract = 0n, saving = 0n, dSum = 0, dN = 0;
