@@ -40,7 +40,8 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   }
   let dup = sb.from("transactions").select("id", { count: "exact", head: true }).eq("budget_version_id", ver.id).eq("budget_entry_id", entryId).eq("transaction_date", d.transaction_date).eq("amount", d.amount);
   dup = rupId ? dup.eq("rup_package_id", rupId) : dup.is("rup_package_id", null);
-  if (((await dup).count ?? 0) > 0) return { error: "Transaksi dengan tanggal, rekening, kode RUP, dan nilai yang sama sudah tercatat. Untuk melengkapi No SPM/SP2D, ubah lewat Daftar transaksi atau unggah ulang." };
+  dup = d.description ? dup.eq("description", d.description) : dup.is("description", null);   // uraian berbeda = transaksi berbeda (mis. dua konsumsi rapat pada hari dan nilai yang sama)
+  if (((await dup).count ?? 0) > 0) return { error: "Transaksi dengan tanggal, rekening, kode RUP, nilai, dan uraian yang sama sudah tercatat. Jika ini pembelian yang berbeda, bedakan uraiannya; untuk melengkapi No SPM/SP2D, ubah lewat Daftar transaksi." };
   // Penyedia: pilih dari master, atau ketik nama baru (dicocokkan tanpa membedakan huruf/spasi/tanda baca agar tidak dobel).
   const { new_provider_name, ...row } = d; let providerId = row.provider_id;
   if (providerId) { const { data: pv } = await sb.from("providers").select("is_active").eq("id", providerId).maybeSingle(); if (!pv?.is_active) return { error: "Penyedia yang dipilih tidak ditemukan atau nonaktif." }; }
@@ -49,6 +50,7 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
     if (r.error) return { error: r.error.code === "P0001" ? r.error.message : r.error.code === "42883" ? "Migrasi database 20260119 (penyedia pada transaksi) belum dijalankan di Supabase." : "Penyedia baru gagal disimpan. Anda mungkin tidak berwenang." };
     providerId = r.data as string;
   }
+  if (!row.description) delete (row as { description?: unknown }).description;
   const { error } = await sb.from("transactions").insert({ ...row, budget_entry_id: entryId, rup_package_id: rupId, provider_id: providerId, budget_version_id: ver.id });
   if (error?.code === "P0001") return { error: error.message };
   if (error?.code === "23502" || error?.code === "42703" || error?.message?.includes("schema cache")) return { error: MIGRASI };
@@ -67,7 +69,7 @@ export async function saveTransaction(_p: FormState, fd: FormData): Promise<Form
   const s = await getSession(); if (!s || !can(s.roles, "realization:write")) return { error: NO_AUTH };
   const p = transactionSaveSchema.safeParse(Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)]))); if (!p.success) return { error: p.error.issues.map((i) => i.message).join("; ") };
   const d = p.data, sb = await createClient(), ctx = await getBudgetContext(); if (!ctx) return { error: "Konteks anggaran belum dipilih." };
-  const { data: row } = await sb.from("transactions").select("budget_version_id, budget_entry_id, rup_package_id, procurement_method_id, provider_id, transaction_date, amount, payment_date, payment_number, notes").eq("id", d.id).maybeSingle();
+  const { data: row } = await sb.from("transactions").select("*").eq("id", d.id).maybeSingle();
   if (!row) return { error: "Transaksi tidak ditemukan atau sudah dihapus. Muat ulang halaman." };
   const patch: Record<string, unknown> = {}, same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null);
   if (!same(d.transaction_date, row.transaction_date)) patch.transaction_date = d.transaction_date;
@@ -75,6 +77,7 @@ export async function saveTransaction(_p: FormState, fd: FormData): Promise<Form
   if (!same(d.payment_date, row.payment_date)) patch.payment_date = d.payment_date;
   if (!same(d.payment_number, row.payment_number)) patch.payment_number = d.payment_number;
   if (!same(d.notes, row.notes)) patch.notes = d.notes;
+  if (!same(d.description, row.description)) patch.description = d.description;
   if (!same(d.provider_id, row.provider_id)) patch.provider_id = d.provider_id;
   let targetVid = row.budget_version_id as string;
   if ("transaction_date" in patch || "payment_date" in patch) {

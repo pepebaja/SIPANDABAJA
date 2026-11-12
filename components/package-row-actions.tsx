@@ -5,7 +5,8 @@ import type { FormState } from "@/app/(app)/master/actions";
 import { ConfirmButton } from "@/components/confirm-button";
 import { parseRupiah } from "@/lib/import/parse";
 import { formatRupiah } from "@/lib/format";
-export type PkgRow = { id: string; code: string; name: string; pagu: string; status: string; method_id: string | null; execution_mode: string; due_date: string | null; ppbj_id: string | null; ppk_id: string | null; pptk_id: string | null };
+import { JENIS_LABEL } from "@/lib/procurement-profile";
+export type PkgRow = { id: string; code: string; name: string; pagu: string; status: string; method_id: string | null; execution_mode: string; procurement_type: string | null; is_recurring: boolean; due_date: string | null; ppbj_id: string | null; ppk_id: string | null; pptk_id: string | null };
 type Opt = { value: string; label: string };
 const cls = "mt-1 w-full";
 
@@ -23,8 +24,10 @@ function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: Pkg
           <span className="text-xs font-normal">{pagu && val === null ? <b className="text-red-700">Angka tidak dikenali</b> : val !== null ? <b>{formatRupiah(val)}</b> : null}</span></label>
         <label className="block text-sm font-medium">Status{<select name="status" required defaultValue={row.status} className={cls}>{statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>}</label>
         <label className="block text-sm font-medium">Metode pemilihan{sel("method_id", row.method_id, methods, "(belum ditentukan)")}</label>
+        <label className="block text-sm font-medium">Jenis pengadaan<select name="procurement_type" defaultValue={row.procurement_type ?? "jasa_lainnya"} className={cls}>{Object.entries(JENIS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
         <label className="block text-sm font-medium">Mode pelaksanaan<select name="execution_mode" defaultValue={row.execution_mode} className={cls}><option value="penyedia">Penyedia</option><option value="swakelola">Swakelola</option></select></label>
         <label className="block text-sm font-medium">Tenggat<input type="date" name="due_date" defaultValue={row.due_date ?? ""} className={cls} /></label>
+        <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" name="is_recurring" defaultChecked={row.is_recurring} className="mt-1" /><span><b>Paket berulang</b> (dibelanjakan berkali-kali, mis. konsumsi rapat, pemeliharaan kendaraan): banyak pelaksanaan, kontrak/SP, dan pembayaran di bawah satu kode RUP.</span></label>
         <label className="block text-sm font-medium">PPBJ{sel("ppbj_id", row.ppbj_id, ppbj, "(belum dipilih)")}</label>
         <label className="block text-sm font-medium">PPK{sel("ppk_id", row.ppk_id, ppk, "(belum dipilih)")}</label>
         <label className="block text-sm font-medium">PPTK{sel("pptk_id", row.pptk_id, pptk, "(belum dipilih)")}</label>

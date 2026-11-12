@@ -6,6 +6,7 @@ import { parseRupiah } from "@/lib/import/parse";
 import { todayIso } from "@/lib/date";
 import { Icon } from "@/components/icons";
 import { generatePackagesFromRup } from "./actions";
+import { JENIS_LABEL } from "@/lib/procurement-profile";
 import { PackageRowActions } from "@/components/package-row-actions";
 import { getSession } from "@/lib/server/session";
 import { can } from "@/lib/rbac";
@@ -13,7 +14,7 @@ export const metadata = { title: "Paket pengadaan" };
 const PAGE = 25;
 const KELOMPOK: Record<string, string> = { sudah_diproses: "Sudah diproses", belum_diproses: "Belum diproses", selesai: "Selesai", tidak_aktif: "Tidak aktif" };
 const safe = (codes: string[]) => codes.filter((c) => /^[A-Za-z0-9_]+$/.test(c));
-export default async function PaketPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; status?: string; kelompok?: string; filter?: string; made?: string; error?: string }> }) {
+export default async function PaketPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string; status?: string; kelompok?: string; filter?: string; made?: string; carried?: string; refreshed?: string; error?: string }> }) {
   const sp = await searchParams; const ctx = await getBudgetContext();
   if (!ctx?.versionId) return <p className="alert alert-info max-w-xl">Belum ada versi anggaran untuk konteks ini. Siapkan di menu Impor anggaran.</p>;
   const q = (sp.q ?? "").replace(/[%,()*]/g, " ").trim().slice(0, 80), page = Math.max(1, Number(sp.page) || 1);
@@ -21,7 +22,7 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
   const { data: sts } = await sb.from("package_statuses").select("code, name, stage_group, needs_followup").eq("is_active", true).order("sort_order");
   const meta = sts ?? [], codes = (f: (s: (typeof meta)[number]) => boolean) => safe(meta.filter(f).map((s) => s.code));
   const status = meta.some((s) => s.code === sp.status) ? sp.status! : "", kelompok = KELOMPOK[sp.kelompok ?? ""] ? sp.kelompok! : "", tl = sp.filter === "tindak-lanjut";
-  let query = sb.from("procurement_packages").select("id, internal_code, name, pagu, status, due_date, rup_package_id, method_id, execution_mode, ppbj_id, ppk_id, pptk_id", { count: "exact" })
+  let query = sb.from("procurement_packages").select("id, internal_code, name, pagu, status, due_date, rup_package_id, method_id, execution_mode, procurement_type, is_recurring, carried_from, ppbj_id, ppk_id, pptk_id, method:procurement_methods(name)", { count: "exact" })
     .eq("budget_version_id", ctx.versionId).order("internal_code").range((page - 1) * PAGE, page * PAGE - 1);
   if (q) query = query.or(`name.ilike.%${q}%,internal_code.ilike.%${q}%`);
   if (status) query = query.eq("status", status);
@@ -44,12 +45,12 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
         <div className="flex flex-wrap gap-2">
           <Link href="/laporan/paket-pengadaan" className="btn btn-ghost"><Icon name="printer" className="h-4 w-4" />Cetak</Link>
           <a href="/api/laporan/paket-pengadaan" className="btn btn-ghost"><Icon name="download" className="h-4 w-4" />Excel</a>
-          <form action={generatePackagesFromRup}><button className="btn btn-ghost" title="Membuat paket untuk semua RUP yang belum punya paket">Buat paket dari semua RUP</button></form>
+          <form action={generatePackagesFromRup}><button className="btn btn-ghost" title="Membuat paket untuk semua RUP yang belum punya paket; paket yang sudah berjalan di tahapan sebelumnya dibawa beserta status dan kontraknya">Buat paket dari semua RUP</button></form>
           <Link href="/paket/baru" className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tambah paket</Link></div>
       </div>
-      {sp.made !== undefined && <p role="status" className="alert alert-info">{Number(sp.made) > 0 ? `${sp.made} paket dibuat dari RUP. Lengkapi PPBJ/PPK/PPTK dan tenggat di rincian paket.` : "Semua RUP sudah punya paket."}</p>}
+      {sp.made !== undefined && <p role="status" className="alert alert-info">{Number(sp.made) + Number(sp.refreshed ?? 0) > 0 ? `${sp.made} paket dibuat dari RUP${Number(sp.carried) > 0 ? `, ${sp.carried} di antaranya dibawa dari tahapan sebelumnya (status, pejabat, dan kontrak ikut)` : ""}${Number(sp.refreshed) > 0 ? `; ${sp.refreshed} paket Rencana disegarkan dari tahapan sebelumnya` : ""}. Lengkapi data yang masih kosong di rincian paket.` : "Semua RUP sudah punya paket."}</p>}
       {sp.error && <p role="alert" className="alert alert-error">Gagal membuat paket dari RUP. Anda mungkin tidak berwenang.</p>}
-      <p className="text-sm text-slate-600">Setiap paket mewakili satu kode RUP (kode paket = kode RUP). Ubah status paket sesuai tahap proses; tanggal mulai dan selesai terisi otomatis.</p>
+      <p className="text-sm text-slate-600">Setiap paket mewakili satu kode RUP (kode paket = kode RUP). Paket yang sudah berjalan pada tahapan sebelumnya dibawa dengan status, pejabat, dan kontraknya saat Anda menekan <b>Buat paket dari semua RUP</b>. Paket berulang (mis. konsumsi rapat, pemeliharaan kendaraan) ditandai <i>Berulang</i> dan dapat memiliki banyak pelaksanaan.</p>
       <form className="flex flex-wrap items-end gap-2">
         <input name="q" defaultValue={q} placeholder="Cari kode RUP atau nama paket" className="w-full max-w-xs" />
         <select name="status" defaultValue={status} aria-label="Filter status"><option value="">Semua status</option>{meta.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select>
@@ -59,13 +60,14 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
       {active && <p className="alert alert-info inline-block py-2 text-sm">Filter aktif: <b>{active}</b></p>}
       {error ? <p role="alert" className="alert alert-error">Data tidak dapat dimuat. Muat ulang halaman.</p>
         : !data?.length ? <p className="text-slate-600">{q || active ? "Tidak ada paket yang cocok." : "Belum ada paket pada tahun/tahapan ini."}</p> : (
-        <div className="table-wrap"><table><thead><tr><th>Kode RUP</th><th>Nama paket</th><th className="text-right">Pagu</th><th>Status</th><th>Tenggat</th>{canWrite && <th>Aksi</th>}</tr></thead>
+        <div className="table-wrap"><table><thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Jenis · metode</th><th className="text-right">Pagu</th><th>Status</th><th>Tenggat</th>{canWrite && <th>Aksi</th>}</tr></thead>
           <tbody>{data.map((p) => <tr key={p.id}><td><Link className="link" href={`/paket/${p.id}`}>{p.internal_code}</Link></td>
-            <td>{p.name}{!p.rup_package_id && <span className="badge badge-warn ml-2">Belum ada kode RUP</span>}</td>
+            <td>{p.name}{!p.rup_package_id && <span className="badge badge-warn ml-2">Belum ada kode RUP</span>}{p.is_recurring && <span className="badge badge-info ml-2">Berulang</span>}{p.carried_from && <span className="badge badge-off ml-2" title="Status, pejabat, dan kontrak dibawa dari tahapan sebelumnya">Dibawa</span>}</td>
+            <td className="text-sm">{p.procurement_type ? JENIS_LABEL[p.procurement_type] : <span className="text-amber-800">jenis belum diisi</span>}<span className="block text-xs text-slate-600">{(p as any).method?.name ?? "metode belum ditentukan"}</span></td>
             <td className="text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td><span className="badge badge-info">{statusName.get(p.status) ?? p.status}</span></td>
             <td className={p.due_date && p.due_date < todayIso() ? "font-semibold text-amber-800" : ""}>{p.due_date ? p.due_date.split("-").reverse().join("/") : "-"}</td>
             {canWrite && <td className="min-w-40"><PackageRowActions statuses={statusOpts} methods={methodOpts} ppbj={off("ppbj")} ppk={off("ppk")} pptk={off("pptk")}
-              row={{ id: p.id, code: p.internal_code, name: p.name, pagu: String(p.pagu), status: p.status, method_id: p.method_id, execution_mode: p.execution_mode, due_date: p.due_date, ppbj_id: p.ppbj_id, ppk_id: p.ppk_id, pptk_id: p.pptk_id }} /></td>}</tr>)}</tbody></table></div>)}
+              row={{ id: p.id, code: p.internal_code, name: p.name, pagu: String(p.pagu), status: p.status, method_id: p.method_id, execution_mode: p.execution_mode, procurement_type: p.procurement_type, is_recurring: !!p.is_recurring, due_date: p.due_date, ppbj_id: p.ppbj_id, ppk_id: p.ppk_id, pptk_id: p.pptk_id }} /></td>}</tr>)}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">
         {page > 1 && <Link className="link" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages} ({count ?? 0} paket)</span>
         {page < pages && <Link className="link" href={href(page + 1)}>Berikutnya</Link>}</nav>

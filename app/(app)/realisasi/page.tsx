@@ -28,14 +28,14 @@ import { deleteTxImportJob } from "./unggah-actions";
 
 export const maxDuration = 60; // unggahan besar (pratinjau + penerapan) membutuhkan beberapa detik
 const PAGE = 25;
-type SP = { reset?: string; tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string; program?: string; kegiatan?: string; sub?: string; jenis?: string; rekening?: string; dari?: string; sampai?: string; basis?: string; cek?: string };
+type SP = { reset?: string; tab?: string; pay?: string; proses?: string; page?: string; error?: string; msg?: string; rup?: string; uraian?: string; program?: string; kegiatan?: string; sub?: string; jenis?: string; rekening?: string; dari?: string; sampai?: string; basis?: string; cek?: string };
 const pill = (on: boolean) => `rounded-full border px-4 py-1.5 text-sm font-semibold transition ${on ? "border-cyan-700 bg-cyan-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`;
 const Skeleton = ({ h = "h-40" }: { h?: string }) => <div className={`card ${h} animate-pulse bg-slate-100`} role="status" aria-label="Memuat" />;
 
 // ---------- tab: input manual (memuat seluruh rekening/RUP/paket; di-stream) ----------
-async function ManualTab({ sb, vid, yearId, year }: { sb: SupabaseClient; vid: string; yearId: string; year: number }) {
+async function ManualTab({ sb, vid, yearId, year, prefill }: { sb: SupabaseClient; vid: string; yearId: string; year: number; prefill?: { rupCode?: string; description?: string } }) {
   const form = await loadRealizationForm(sb, vid, yearId, year);
-  return form.entries.length ? <TransactionForm year={year} entries={form.entries} rups={form.rups} methods={form.methods} providers={form.providers} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} windows={form.windows} stageData={form.stageData} currentStageId={form.currentStageId} />
+  return form.entries.length ? <TransactionForm year={year} entries={form.entries} rups={form.rups} methods={form.methods} providers={form.providers} allocByRup={form.allocByRup} hasCashPlan={form.hasCashPlan} windows={form.windows} stageData={form.stageData} currentStageId={form.currentStageId} prefill={prefill} />
     : <p className="alert alert-warn">Belum ada rekening anggaran. Impor anggaran lebih dulu.</p>;
 }
 
@@ -47,7 +47,7 @@ async function UnggahTab({ sb, yearId, year, canSetStage }: { sb: SupabaseClient
 
 // ---------- tab: daftar transaksi (kumulatif: tahapan terpilih + tahapan sebelumnya) ----------
 // Relasi bersarang !inner agar filter program/kegiatan/sub kegiatan dapat diterapkan langsung di database (tanpa daftar ID panjang pada URL).
-const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts!inner(code)), rup_packages(rup_code)";
+const SEL = "id, budget_version_id, transaction_date, amount, notes, payment_date, payment_number, payment_status, procurement_method_id, procurement_methods(name), provider_id, providers(name), description, budget_entries!inner(description, subactivity_id, subactivities!inner(code, name, activity_id, activities!inner(code, name, program_id, programs(code, name))), expenditure_accounts!inner(code)), rup_packages(rup_code)";
 const SUM_SEL = "amount, payment_date, budget_entries!inner(subactivity_id, account_id, expenditure_accounts!inner(code), subactivities!inner(activity_id, activities!inner(program_id)))";
 /** Ringkasan sesuai filter: pagu rekening pada cakupan program/kegiatan/sub kegiatan (tahapan terpilih) dan transaksi yang lolos SEMUA filter (kumulatif), sehingga kartu di atas sama dengan isi daftar. */
 async function filteredTotals(sb: SupabaseClient, vid: string, yearId: string, f: TxFilter, fullPagu: string): Promise<Derived> {
@@ -74,7 +74,8 @@ async function DaftarTab({ sb, vid, yearId, year, sp, canWrite, summary }: { sb:
   const scope = ids.length ? ids : [vid];
   const listQ = applyTxFilter(sb.from("transactions").select(SEL, { count: "exact" }).in("budget_version_id", scope), f)
     .order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);
-  const tx: any = await listQ;
+  let tx: any = await listQ;
+  if (tx.error) tx = await applyTxFilter(sb.from("transactions").select(SEL.replace(", description", ""), { count: "exact" }).in("budget_version_id", scope), f).order("transaction_date", { ascending: false }).order("id").range((page - 1) * PAGE, page * PAGE - 1);   // kolom uraian belum ada (migrasi 20260122)
   const rows: any[] = tx.data ?? [], total = tx.count ?? 0, pages = Math.max(1, Math.ceil(total / PAGE));
   const qs = (o: Record<string, string>) => new URLSearchParams({ tab: "daftar", ...Object.fromEntries(Object.entries(o).filter(([, v]) => v)) });
   const pageHref = (p: number) => `/realisasi?${qs({ ...txFilterParams(f), page: String(p) })}`;
@@ -95,11 +96,11 @@ async function DaftarTab({ sb, vid, yearId, year, sp, canWrite, summary }: { sb:
               <td className="min-w-64 text-sm"><span className="font-medium">{sa ? `${sa.code} ${sa.name}` : "-"}</span><span className="block text-xs text-slate-700">{be?.expenditure_accounts?.code}: {be?.description}</span>
                 <span className="block text-xs text-slate-500">{pg ? `Program ${pg.code}` : ""}{ac ? ` · Kegiatan ${ac.code}` : ""}</span></td>
               <td className="min-w-32 text-sm">{r.payment_date ? <>{fmtDate(r.payment_date)}<span className="block text-xs text-slate-600">{r.payment_number ?? "-"}</span></> : <span className="text-slate-500">belum diakui</span>}</td>
-              <td className="min-w-44 text-sm">{rupCode ? <>RUP {rupCode}</> : <span className="text-slate-500">{methodName ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{methodName && <span className="block text-xs text-slate-600">{methodName}</span>}{provName && <span className="block text-xs text-slate-800">{provName}</span>}</td>
+              <td className="min-w-44 text-sm">{rupCode ? <>RUP {rupCode}</> : <span className="text-slate-500">{methodName ? "Tanpa kode RUP" : "Non-pengadaan"}</span>}{methodName && <span className="block text-xs text-slate-600">{methodName}</span>}{provName && <span className="block text-xs text-slate-800">{provName}</span>}{r.description && <span className="block text-xs italic text-slate-700">{r.description}</span>}</td>
               <td className={`whitespace-nowrap text-right tabular-nums ${Number(r.amount) < 0 ? "text-amber-800" : ""}`}>{rp(r.amount)}{Number(r.amount) < 0 && <span className="block text-xs">koreksi</span>}</td>
               <td className="min-w-40 text-xs">{issues.length ? <ul className="space-y-0.5">{issues.map((t) => <li key={t} className="text-amber-800">• {t}</li>)}</ul> : <span className="text-emerald-700">Lengkap</span>}</td>
               {canWrite && <td className="whitespace-nowrap"><TransactionEditDialog year={year} info={info} methods={methods} providers={provs}
-                row={{ id: r.id, transaction_date: r.transaction_date, amount: String(r.amount), payment_date: r.payment_date, payment_number: r.payment_number, rup_code: rupCode, method_id: r.procurement_method_id, provider_id: r.provider_id, notes: r.notes }} /></td>}</tr>); })}</tbody></table></div>)}
+                row={{ id: r.id, transaction_date: r.transaction_date, amount: String(r.amount), payment_date: r.payment_date, payment_number: r.payment_number, description: r.description ?? null, rup_code: rupCode, method_id: r.procurement_method_id, provider_id: r.provider_id, notes: r.notes }} /></td>}</tr>); })}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">{page > 1 && <Link className="link" href={pageHref(page - 1)}>Sebelumnya</Link>}<span>{total} transaksi · halaman {page} dari {pages}</span>{page < pages && <Link className="link" href={pageHref(page + 1)}>Berikutnya</Link>}</nav>
     </div>);
 }
@@ -184,7 +185,7 @@ export default async function RealisasiPage({ searchParams }: { searchParams: Pr
         <p className="text-sm text-slate-600">Catat, kontrol, dan perbaiki realisasi di satu tempat. Data yang sudah masuk dapat diubah atau dihapus kapan saja lewat tombol <b>Ubah</b> pada Daftar.</p></div>
       <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-3" aria-label="Menu Input Realisasi">{tabs.map(([k, l]) => <Link key={k} href={`/realisasi?tab=${k}`} className={pill(k === tab)} aria-current={k === tab ? "page" : undefined}>{l}</Link>)}</nav>
       {tab === "unggah" && <Suspense fallback={<Skeleton h="h-72" />}><UnggahTab sb={sb} yearId={ctx.yearId} year={ctx.year} canSetStage={canAdmin} /></Suspense>}
-      {tab === "manual" && <Suspense fallback={<Skeleton />}><ManualTab sb={sb} vid={vid} yearId={ctx.yearId} year={ctx.year} /></Suspense>}
+      {tab === "manual" && <Suspense fallback={<Skeleton />}><ManualTab sb={sb} vid={vid} yearId={ctx.yearId} year={ctx.year} prefill={{ rupCode: sp.rup?.slice(0, 50), description: sp.uraian?.slice(0, 300) }} /></Suspense>}
       {tab === "daftar" && <Suspense fallback={<Skeleton h="h-72" />}><DaftarTab sb={sb} vid={vid} yearId={ctx.yearId} year={ctx.year} sp={sp} canWrite={canWrite} summary={summary} /></Suspense>}
       {tab === "riwayat" && <Suspense fallback={<Skeleton h="h-72" />}><RiwayatTab sb={sb} canAdmin={canAdmin} year={ctx.year} reset={sp.reset} /></Suspense>}
     </section>);

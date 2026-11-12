@@ -16,15 +16,15 @@ const today = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 1
 const hit = (hay: string, q: string) => q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.toLowerCase().includes(w));
 
 /** Input Realisasi terpadu: pilih RUP (opsional) dan rekening dari arsip anggaran; sisa pagu RUP, pagu rekening, dan kas kumulatif tampil langsung. */
-export function TransactionForm({ year, entries, rups, methods, providers, allocByRup, hasCashPlan, windows, stageData, currentStageId }: { year: number; entries: FormEntry[]; rups: FormRup[]; methods: FormMethod[]; providers: FormProvider[]; allocByRup: Record<string, string[]>; hasCashPlan: boolean; windows: StageWindow[]; stageData: Record<string, StageData>; currentStageId: string }) {
+export function TransactionForm({ year, entries, rups, methods, providers, allocByRup, hasCashPlan, windows, stageData, currentStageId, prefill }: { year: number; entries: FormEntry[]; rups: FormRup[]; methods: FormMethod[]; providers: FormProvider[]; allocByRup: Record<string, string[]>; hasCashPlan: boolean; windows: StageWindow[]; stageData: Record<string, StageData>; currentStageId: string; prefill?: { rupCode?: string; description?: string } }) {
   const [s, action, pending] = useActionState<FormState, FormData>(addTransaction, {});
-  const [rupId, setRupId] = useState(""), [entryId, setEntryId] = useState(""), [date, setDate] = useState(today), [amount, setAmount] = useState(""), [methodId, setMethodId] = useState(""), [methodTouched, setMethodTouched] = useState(false);
+  const [rupId, setRupId] = useState(() => (prefill?.rupCode ? (rups.find((r) => r.code === prefill.rupCode)?.id ?? "") : "")), [entryId, setEntryId] = useState(""), [date, setDate] = useState(today), [amount, setAmount] = useState(""), [methodId, setMethodId] = useState(""), [methodTouched, setMethodTouched] = useState(false);
   const [qRup, setQRup] = useState(""), [qEntry, setQEntry] = useState(""), [qProv, setQProv] = useState("");
   const [providerId, setProviderId] = useState(""), [provTouched, setProvTouched] = useState(false), [newProv, setNewProv] = useState("");
-  const [payDate, setPayDate] = useState(""), [payNo, setPayNo] = useState(""), [notes, setNotes] = useState("");
+  const [payDate, setPayDate] = useState(""), [payNo, setPayNo] = useState(""), [notes, setNotes] = useState(""), [desc, setDesc] = useState(prefill?.description ?? "");
   const amountRef = useRef<HTMLInputElement>(null);
   // Setelah tersimpan: kosongkan isian yang khas per transaksi, pertahankan RUP/rekening/tanggal/metode/penyedia untuk input berikutnya.
-  useEffect(() => { if (s.ok) { setAmount(""); setPayDate(""); setPayNo(""); setNotes(""); amountRef.current?.focus(); } }, [s]);
+  useEffect(() => { if (s.ok) { setAmount(""); setPayDate(""); setPayNo(""); setNotes(""); setDesc(""); amountRef.current?.focus(); } }, [s]);
   const rup = rups.find((r) => r.id === rupId) ?? null, entry = entries.find((e) => e.id === entryId) ?? null;
   const allocated = useMemo(() => new Set(rupId ? allocByRup[rupId] ?? [] : []), [rupId, allocByRup]);
   const rupOpts = useMemo(() => rups.filter((r) => r.id === rupId || hit(`${r.code} ${r.name}`, qRup)).slice(0, ENTRY_CAP), [rups, qRup, rupId]);
@@ -104,6 +104,7 @@ export function TransactionForm({ year, entries, rups, methods, providers, alloc
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm font-medium">Tanggal SPM/SP2D <span className="font-normal text-slate-500">(penentu tahapan &amp; pengakuan realisasi)</span><input type="date" name="payment_date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className={cls} aria-invalid={payOut} />{payOut && <span className="mt-1 block text-xs font-semibold text-red-700">Harus di tahun anggaran {year}</span>}<span className="mt-1 block text-xs font-normal text-slate-600">Boleh dikosongkan: transaksi dicatat dengan status <b>belum_spm_sp2d</b> (belum diakui sebagai realisasi, tetap menahan pagu) dan baru diakui setelah tanggal ini diisi lewat Daftar transaksi &gt; Ubah. Tahapan sementara mengikuti tanggal transaksi.</span></label>
         <label className="block text-sm font-medium">No SPM/SP2D <span className="font-normal text-slate-500">(dapat dilengkapi kemudian)</span><input name="payment_number" maxLength={100} value={payNo} onChange={(e) => setPayNo(e.target.value)} autoComplete="off" className={cls} /></label>
+        <label className="block text-sm font-medium sm:col-span-3">Uraian / keperluan <span className="font-normal text-slate-500">(untuk belanja berulang, mis. Konsumsi rapat koordinasi 12 Nov; uraian berbeda = transaksi berbeda)</span><input name="description" maxLength={300} value={desc} onChange={(e) => setDesc(e.target.value)} autoComplete="off" className={cls} /></label>
         <label className="block text-sm font-medium">Catatan<input name="notes" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} autoComplete="off" className={cls} /></label>
       </div>
       {checks.length > 0 && <ul className="space-y-1" aria-label="Pemeriksaan isian">{checks.map((c) => <li key={c.text} className={`alert text-sm ${c.level === "warn" ? "alert-warn" : "alert-info"}`}>{c.text}</li>)}</ul>}

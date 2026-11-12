@@ -28,7 +28,7 @@ export default async function PenyediaReportPage() {
       {noProv > 0 && <p role="status" className="alert alert-warn no-print text-sm">{noProv} transaksi pengadaan belum diisi penyedianya sehingga belum masuk laporan ini. <Link className="link" href="/realisasi?tab=daftar&cek=tanpa_penyedia">Lengkapi di Daftar transaksi</Link>.</p>}
       {!list.length ? <p className="text-slate-600">Belum ada penyedia yang tercatat pada transaksi atau kontrak tahun ini. Pilih penyedia di Input Realisasi atau pada kontrak paket.</p> : (
         <div className="table-wrap"><table><caption className="sr-only">Penyedia dan jumlah paket pekerjaan</caption>
-          <thead><tr><th scope="col" className="w-12">No</th><th scope="col">Penyedia</th><th scope="col" className="text-right">Jumlah paket</th><th scope="col" className="text-right">Transaksi</th><th scope="col" className="text-right">Nilai kontrak/SP</th><th scope="col" className="text-right">Realisasi diakui</th></tr></thead>
+          <thead><tr><th scope="col" className="w-12">No</th><th scope="col">Penyedia</th><th scope="col" className="text-right">Jumlah paket</th><th scope="col" className="text-right">Pelaksanaan (pembayaran)</th><th scope="col" className="text-right">Nilai kontrak/SP</th><th scope="col" className="text-right">Realisasi diakui</th></tr></thead>
           <tbody>{list.map((p, i) => (
             <tr key={p.id} className="align-top"><td>{i + 1}</td>
               <td><details><summary className="cursor-pointer font-medium">{p.name}</summary>

@@ -7,7 +7,7 @@ import { toCents } from "@/lib/money";
 import { formatRupiah } from "@/lib/format";
 import { checkTransactionInput, payDateOutOfYear } from "@/lib/realization-checks";
 import { ConfirmButton } from "@/components/confirm-button";
-export type EditRow = { id: string; transaction_date: string; amount: string; payment_date: string | null; payment_number: string | null; rup_code: string | null; method_id: string | null; provider_id: string | null; notes: string | null };
+export type EditRow = { id: string; transaction_date: string; amount: string; payment_date: string | null; payment_number: string | null; description: string | null; rup_code: string | null; method_id: string | null; provider_id: string | null; notes: string | null };
 type Opt = { id: string; name: string };
 const cls = "mt-1 w-full";
 
@@ -33,6 +33,7 @@ function EditForm({ row, info, methods, providers, year, close }: { row: EditRow
           <label className="block text-sm font-medium">Kode RUP<input name="rup_code" maxLength={50} inputMode="numeric" value={rup} onChange={(e) => setRup(e.target.value)} autoComplete="off" className={cls} /><span className="text-xs font-normal text-slate-500">Kosongkan untuk belanja non-pengadaan.</span></label>
           <label className="block text-sm font-medium">Metode pemilihan<select name="method_id" value={method} onChange={(e) => setMethod(e.target.value)} className={cls}><option value="">(kosong / ikut rencana RUP)</option>{methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
           <label className="block text-sm font-medium sm:col-span-2">Penyedia pelaksana<select name="provider_id" value={prov} onChange={(e) => setProv(e.target.value)} className={cls}><option value="">(belum dipilih)</option>{providers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+          <label className="block text-sm font-medium sm:col-span-2">Uraian / keperluan<input name="description" maxLength={300} defaultValue={row.description ?? ""} autoComplete="off" className={cls} /></label>
           <label className="block text-sm font-medium sm:col-span-2">Catatan<input name="notes" maxLength={500} defaultValue={row.notes ?? ""} autoComplete="off" className={cls} /></label>
         </div>
         {checks.length > 0 && <ul className="space-y-1">{checks.map((c) => <li key={c.text} className={`alert text-sm ${c.level === "warn" ? "alert-warn" : "alert-info"}`}>{c.text}</li>)}</ul>}
