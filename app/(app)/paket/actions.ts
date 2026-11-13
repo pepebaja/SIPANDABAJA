@@ -7,6 +7,7 @@ import { fetchAll } from "@/lib/server/fetch-all";
 import { modeOfMethod, packageCreateSchema, packageEditSchema } from "@/lib/packages";
 import { getSession } from "@/lib/server/session";
 import { syncPackagesFromRup } from "@/lib/server/package-carry";
+import { syncPackagesWithRealization } from "@/lib/server/package-sync";
 import { can } from "@/lib/rbac";
 import type { FormState } from "../master/actions";
 
@@ -66,4 +67,13 @@ export async function deletePackage(_p: FormState, fd: FormData): Promise<FormSt
   if (error) return { error: "Paket tidak dapat dihapus. Anda mungkin tidak berwenang." };
   revalidatePath("/paket"); revalidatePath("/");
   return { ok: true };
+}
+
+/** Menyelaraskan seluruh paket dengan data Input Realisasi (status, tanggal proses/serah terima, metode, dan dokumen kontrak dari realisasi). */
+export async function syncWithRealization(): Promise<void> {
+  const s = await getSession(); const ctx = await getBudgetContext();
+  if (!s || !can(s.roles, "rup:write") || !ctx?.yearId) redirect("/paket?error=sync");
+  let r; try { r = await syncPackagesWithRealization(await createClient(), ctx.yearId); } catch { redirect("/paket?error=sync"); }
+  revalidatePath("/paket"); revalidatePath("/laporan/kinerja-pengadaan"); revalidatePath("/");
+  redirect(`/paket?sync=${r.confirmed}-${r.filled}-${r.contracts}`);
 }

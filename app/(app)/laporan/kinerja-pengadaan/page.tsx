@@ -9,6 +9,7 @@ import { fromCents, sumCents } from "@/lib/money";
 import { progressOf, type PerfPackage } from "@/lib/officer-performance";
 import { isEPurchasing, type EpItem } from "@/lib/epurchasing-analysis";
 import { loadStageVersions } from "@/lib/server/stage-versions";
+import { reportCompleteness } from "@/lib/report-completeness";
 import { PerformanceDeck } from "@/components/performance-deck";
 export const metadata = { title: "Laporan kinerja pejabat pengadaan" };
 
@@ -39,9 +40,20 @@ export default async function KinerjaPengadaanPage() {
     ...rups.filter((r: any) => !linked.has(r.id)).map((r: any): EpItem => ({ code: r.rup_code, name: r.name, officer: null, hasPackage: false, cancelled: false, methodName: r.planned?.name ?? NONE, isEp: !!r.planned && isEPurchasing(r.planned),
       plannedName: r.planned?.name ?? null, plannedIsEp: !!r.planned && isEPurchasing(r.planned), pagu: parseRupiah(r.pagu) ?? "0.00", contract: null, realized: realOf(r.rup_code) }))];
   const today = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);   // WIB
+  const methodNone = new Map(epItems.filter((e) => e.hasPackage).map((e) => [e.code, e.methodName === NONE])), gaps = reportCompleteness(pkgs.map((p) => ({ ...p, methodMissing: methodNone.get(p.code) ?? false })), today), totalGap = gaps.reduce((a, g) => a + g.missing, 0);
+  const completeness = (
+    <details className="card no-print p-4" open={totalGap > 0}>
+      <summary className="cursor-pointer font-display font-bold text-navy-800">Kelengkapan data laporan {totalGap > 0 ? `(${totalGap} isian perlu dilengkapi)` : "(lengkap)"}</summary>
+      <p className="mt-2 text-sm text-slate-600">Laporan dihitung dari data paket. Isian yang kosong membuat bagian laporan terkait tidak terhitung atau muncul sebagai "(Belum ditetapkan)". Klik jumlah untuk membuka daftar paket yang perlu dilengkapi, lalu gunakan tombol <b>Ubah</b>. Tombol <b>Sinkronkan dengan realisasi</b> di Paket pengadaan mengisi sebagian otomatis dari Input Realisasi.</p>
+      <div className="table-wrap mt-3 shadow-none"><table><caption className="sr-only">Kelengkapan data laporan kinerja</caption><thead><tr><th scope="col">Isian</th><th scope="col">Dipakai pada</th><th scope="col">Cara melengkapi</th><th scope="col" className="text-right">Kosong</th></tr></thead>
+        <tbody>{gaps.map((g) => <tr key={g.key}><td className="font-medium">{g.label}</td><td className="text-sm">{g.affects}</td><td className="text-sm text-slate-600">{g.how}</td>
+          <td className="text-right tabular-nums">{g.missing > 0 ? <a className="link font-semibold text-amber-800" href={`/paket?lengkapi=${g.key}`}>{g.missing} dari {g.of}</a> : <span className="text-emerald-700">lengkap ({g.of})</span>}</td></tr>)}</tbody></table></div>
+    </details>
+  );
   return (
     <section className="space-y-4">
       <Link href="/laporan" className="no-print link text-sm">← Laporan &amp; dokumen</Link>
+      {completeness}
       <PerformanceDeck pkgs={pkgs} epItems={epItems} today={today} year={ctx.year} stageName={ctx.stageName} profile={profile} printer={{ name: s.profile.full_name, nip: s.profile.nip }} />
     </section>
   );

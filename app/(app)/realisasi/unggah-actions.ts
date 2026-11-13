@@ -12,6 +12,7 @@ import { decodeCsv, parseCsv } from "@/lib/import/csv";
 import { sha256 } from "@/lib/import/hash";
 import { findTxHeader, parseTxRows, type StagedTx, type TxLookup, type TxRowError, type TxRowWarning } from "@/lib/import/transactions";
 import { toCents, fromCents } from "@/lib/money";
+import { syncPackagesWithRealization } from "@/lib/server/package-sync";
 import { latestPerStage, PAYMENT_LABEL } from "@/lib/stage-rule";
 import { parseDateCell } from "@/lib/import/dates";
 
@@ -110,7 +111,8 @@ export async function confirmTxImport(_p: TxImportState, fd: FormData): Promise<
   const { data, error } = await (await createClient()).rpc("apply_transaction_import", { p_job: jobId, p_commit: true, p_skip_errors: fd.get("skip") === "on" });
   if (error) return { error: error.message };
   const r = data as { inserted: number; updated: number; existing: number; failed: unknown[] };
-  revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
+  { const ctx = await getBudgetContext(); if (ctx?.yearId && r.inserted + r.updated > 0) await syncPackagesWithRealization(await createClient(), ctx.yearId).catch(() => null); }   // paket yang punya realisasi otomatis dikonfirmasi
+  revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/paket"); revalidatePath("/");
   return { result: { inserted: r.inserted, updated: r.updated, existing: r.existing, failed: r.failed?.length ?? 0 } };
 }
 export async function deleteTxImportJob(fd: FormData): Promise<void> {

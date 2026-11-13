@@ -6,8 +6,9 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { parseRupiah } from "@/lib/import/parse";
 import { formatRupiah } from "@/lib/format";
 import { JENIS_LABEL } from "@/lib/procurement-profile";
+import { OBSTACLES } from "@/lib/package-obstacles";
 export type PkgSummary = { count: number; total: string; remaining: string; pct: string | null };
-export type PkgRow = { id: string; code: string; name: string; pagu: string; status: string; method_id: string | null; execution_mode: string; procurement_type: string | null; is_recurring: boolean; due_date: string | null; summary?: PkgSummary | null; ppbj_id: string | null; ppk_id: string | null; pptk_id: string | null };
+export type PkgRow = { id: string; code: string; name: string; pagu: string; status: string; method_id: string | null; execution_mode: string; procurement_type: string | null; is_recurring: boolean; due_date: string | null; summary?: PkgSummary | null; process_start: string | null; process_end: string | null; handover_date: string | null; obstacle_category: string | null; notes: string | null; ppbj_id: string | null; ppk_id: string | null; pptk_id: string | null };
 type Opt = { value: string; label: string };
 const cls = "mt-1 w-full";
 
@@ -31,6 +32,13 @@ function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: Pkg
         <label className="block text-sm font-medium">Mode pelaksanaan<select name="execution_mode" defaultValue={row.execution_mode} className={cls}><option value="penyedia">Penyedia</option><option value="swakelola">Swakelola</option></select></label>
         {rec ? <div className="text-sm text-slate-600"><input type="hidden" name="due_date" value="" /><p className="mt-6">Paket berulang: tanpa tenggat tunggal.</p></div> : <label className="block text-sm font-medium">Tenggat<input type="date" name="due_date" defaultValue={row.due_date ?? ""} className={cls} /></label>}
         <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" name="is_recurring" checked={rec} onChange={(e) => setRec(e.target.checked)} className="mt-1" /><span><b>Paket berulang</b> (dibelanjakan berkali-kali, mis. konsumsi rapat, pemeliharaan kendaraan): banyak pelaksanaan, kontrak/SP, dan pembayaran di bawah satu kode RUP.</span></label>
+        <fieldset className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:col-span-2 sm:grid-cols-3"><legend className="px-1 text-sm font-medium">Data untuk Laporan Kinerja PPBJ</legend>
+          <label className="block text-sm font-medium">Mulai proses<input type="date" name="process_start" defaultValue={row.process_start ?? ""} className={cls} /></label>
+          <label className="block text-sm font-medium">Selesai proses<input type="date" name="process_end" defaultValue={row.process_end ?? ""} className={cls} /></label>
+          <label className="block text-sm font-medium">Serah terima<input type="date" name="handover_date" defaultValue={row.handover_date ?? ""} className={cls} /></label>
+          <label className="block text-sm font-medium sm:col-span-3">Kategori kendala<select name="obstacle_category" defaultValue={row.obstacle_category ?? ""} className={cls}><option value="">(tidak ada kendala)</option>{[...OBSTACLES, ...(row.obstacle_category && !(OBSTACLES as readonly string[]).includes(row.obstacle_category) ? [row.obstacle_category] : [])].map((o) => <option key={o} value={o}>{o}</option>)}</select></label>
+          <label className="block text-sm font-medium sm:col-span-3">Catatan<input name="notes" maxLength={500} defaultValue={row.notes ?? ""} autoComplete="off" className={cls} /></label>
+        </fieldset>
         <label className="block text-sm font-medium">PPBJ{sel("ppbj_id", row.ppbj_id, ppbj, "(belum dipilih)")}</label>
         <label className="block text-sm font-medium">PPK{sel("ppk_id", row.ppk_id, ppk, "(belum dipilih)")}</label>
         <label className="block text-sm font-medium">PPTK{sel("pptk_id", row.pptk_id, pptk, "(belum dipilih)")}</label>

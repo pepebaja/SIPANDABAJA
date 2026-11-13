@@ -12,6 +12,7 @@ import { formatRupiah } from "@/lib/format";
 import { transactionSaveSchema, transactionSchema } from "@/lib/transactions";
 import { referenceDate, resolveVersion } from "@/lib/stage-rule";
 import { mapEntryToVersion } from "@/lib/server/stage-map";
+import { syncPackagesWithRealization } from "@/lib/server/package-sync";
 import type { FormState } from "../master/actions";
 
 const MIGRASI = "Migrasi database 20260113 (realisasi sederhana) belum dijalankan di Supabase.";
@@ -61,6 +62,8 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
   if (error?.code === "P0001") return { error: error.message };
   if (error?.code === "23502" || error?.code === "42703" || error?.message?.includes("schema cache")) return { error: MIGRASI };
   if (error) return { error: "Gagal menyimpan. Anda mungkin tidak berwenang mencatat realisasi." };
+  // Paket pengadaan dengan kode RUP ini otomatis dikonfirmasi dari realisasi (status, tanggal proses, metode); gagal sinkron tidak membatalkan transaksi.
+  { const { data: rc } = rupId ? await sb.from("rup_packages").select("rup_code").eq("id", rupId).maybeSingle() : { data: null }; if (rc?.rup_code) await syncPackagesWithRealization(sb, ctx.yearId, { rupCodes: [rc.rup_code] }).catch(() => null); }
   revalidatePath("/realisasi"); revalidatePath("/rup");
   return { ok: true };
 }
@@ -132,6 +135,7 @@ export async function saveTransaction(_p: FormState, fd: FormData): Promise<Form
   if (error?.code === "P0001") return { error: error.message };
   if (error && (error.code === "42703" || error.message?.includes("schema cache"))) return { error: "Migrasi database 20260119 (penyedia pada transaksi) belum dijalankan di Supabase." };
   if (error) return { error: "Perubahan ditolak. Periksa isian dan hak akses Anda." };
+  if (d.rup_code) await syncPackagesWithRealization(sb, ctx.yearId, { rupCodes: [d.rup_code] }).catch(() => null);
   revalidatePath("/realisasi"); revalidatePath("/rup"); revalidatePath("/");
   return { ok: true };
 }
