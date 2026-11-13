@@ -157,3 +157,42 @@ describe("paket berulang tidak dihitung terlambat", () => {
     expect(isOverdue({ ...base, recurring: true }, "2026-06-01")).toBe(false);
   });
 });
+
+import { deriveFromRealization, type SyncPkg } from "@/lib/package-sync";
+describe("sinkronisasi paket dengan realisasi", () => {
+  const pk = (o: Partial<SyncPkg> = {}): SyncPkg => ({ status: "RENCANA", group: "belum_diproses", pagu: "1000.00", recurring: false, processStart: null, processEnd: null, handover: null, methodId: null, hasContract: false, ...o });
+  const tx = (amount: string, paymentDate: string | null, date = "2026-05-01", methodId: string | null = "m1", providerId: string | null = "p1") => ({ date, paymentDate, amount, methodId, providerId });
+  it("tanpa transaksi, batal/tunda, dan tidak aktif tidak disentuh", () => {
+    expect(deriveFromRealization(pk(), [])).toBeNull();
+    expect(deriveFromRealization(pk({ status: "BATAL", group: "tidak_aktif" }), [tx("10.00", null)])).toBeNull();
+    expect(deriveFromRealization(pk({ status: "TUNDA", group: null }), [tx("10.00", null)])).toBeNull();
+  });
+  it("ada transaksi sebagian: Rencana menjadi Pelaksanaan, tanggal mulai dan metode terisi", () => {
+    const r = deriveFromRealization(pk(), [tx("300.00", "2026-05-03"), tx("100.00", null, "2026-04-20")])!;
+    expect(r.statusChanged).toBe(true); expect(r.patch).toEqual({ status: "PELAKSANAAN", process_start: "2026-04-20", method_id: "m1" }); expect(r.contract).toBeNull();
+  });
+  it("terbayar penuh (bukan berulang): Selesai, tanggal selesai/serah terima, dan dokumen kontrak dibuat dari realisasi", () => {
+    const r = deriveFromRealization(pk(), [tx("600.00", "2026-05-03"), tx("400.00", "2026-05-09")])!;
+    expect(r.patch).toMatchObject({ status: "SELESAI", process_end: "2026-05-09", handover_date: "2026-05-09" }); expect(r.contract).toEqual({ providerId: "p1", value: "1000.00" });
+  });
+  it("paket berulang tidak otomatis selesai; penyedia berbeda tidak diasumsikan", () => {
+    expect(deriveFromRealization(pk({ recurring: true }), [tx("1000.00", "2026-05-03")])!.patch.status).toBe("PELAKSANAAN");
+    expect(deriveFromRealization(pk(), [tx("500.00", "2026-05-03", "2026-05-01", "m1", "p1"), tx("500.00", "2026-05-04", "2026-05-02", "m1", "p2")])!.contract?.providerId).toBeNull();
+  });
+  it("tidak memundurkan status dan tidak menimpa isian yang sudah ada", () => {
+    const r = deriveFromRealization(pk({ status: "PELAKSANAAN", group: "diproses", processStart: "2026-03-01", methodId: "mX", hasContract: true }), [tx("100.00", "2026-05-03")]);
+    expect(r).toBeNull();
+    expect(deriveFromRealization(pk({ status: "PELAKSANAAN", group: "diproses" }), [tx("100.00", "2026-05-03")])!.patch).toEqual({ process_start: "2026-05-03", method_id: "m1" });
+  });
+});
+
+import { reportCompleteness } from "@/lib/report-completeness";
+describe("kelengkapan data Laporan Kinerja PPBJ", () => {
+  const P = (o: any) => ({ id: "x", code: "1", name: "P", officer: "A", pagu: "100.00", status: "PELAKSANAAN", statusName: "", group: "diproses", due: "2026-01-31", handover: null, start: "2026-01-01", end: null, obstacle: null, contract: "90.00", recurring: false, ...o });
+  it("menghitung isian kosong per bagian laporan", () => {
+    const g = Object.fromEntries(reportCompleteness([P({}), P({ officer: null, start: null, contract: null, methodMissing: true }), P({ status: "SELESAI", group: "selesai", handover: null }), P({ status: "BATAL", group: "tidak_aktif", officer: null }), P({ recurring: true, due: null })], "2026-06-01").map((x) => [x.key, x]));
+    expect(g.ppbj).toMatchObject({ missing: 1, of: 4 }); expect(g.mulai).toMatchObject({ missing: 1, of: 4 }); expect(g.kontrak).toMatchObject({ missing: 1 });
+    expect(g.tenggat).toMatchObject({ missing: 0, of: 3 });            // paket berulang dan batal dikecualikan
+    expect(g.serah).toMatchObject({ missing: 1, of: 1 }); expect(g.metode?.missing).toBe(1); expect(g.kendala).toMatchObject({ missing: 2, of: 2 });
+  });
+});
