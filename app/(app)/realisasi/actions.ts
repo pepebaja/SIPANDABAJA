@@ -12,6 +12,7 @@ import { formatRupiah } from "@/lib/format";
 import { transactionSaveSchema, transactionSchema } from "@/lib/transactions";
 import { referenceDate, resolveVersion } from "@/lib/stage-rule";
 import { mapEntryToVersion } from "@/lib/server/stage-map";
+import { normalizeRupCode } from "@/lib/rup-code";
 import { syncPackagesWithRealization } from "@/lib/server/package-sync";
 import type { FormState } from "../master/actions";
 
@@ -35,8 +36,8 @@ export async function addTransaction(_p: FormState, fd: FormData): Promise<FormS
     entryId = me.id;
     if (d.rup_package_id) {
       const { data: src } = await sb.from("rup_packages").select("rup_code").eq("id", d.rup_package_id).maybeSingle();
-      const { data: dst } = src ? await sb.from("rup_packages").select("id").eq("budget_version_id", ver.id).eq("rup_code", src.rup_code).maybeSingle() : { data: null };
-      if (!dst) return { error: `Tanggal ${ref.date} termasuk tahapan ${ver.stageName}, tetapi kode RUP ${src?.rup_code ?? ""} belum ada pada tahapan itu. Sinkronkan RUP tahapan ${ver.stageName} (menu Paket RUP) atau pilih tanggal lain.` };
+      if (!src) return { error: "Paket RUP yang dipilih tidak ditemukan." };
+      const dst = await ensureRup(sb, src.rup_code, ver.id, ver.stageName); if ("error" in dst) return { error: `Tanggal ${ref.date} termasuk tahapan ${ver.stageName}. ${dst.error}` };
       rupId = dst.id;
     }
   }
@@ -77,6 +78,24 @@ async function checkContract(sb: Awaited<ReturnType<typeof createClient>>, contr
   let q = sb.from("transactions").select("amount").in("contract_id", (fam ?? [{ id: c.id }]).map((x: { id: string }) => x.id)); if (excludeTxId) q = q.neq("id", excludeTxId);
   const { data: tx } = await q, paid = sumCents((tx ?? []).map((t: { amount: unknown }) => parseRupiah(t.amount) ?? "0.00")), left = toCents(value) - paid;
   return paid + toCents(amount) > toCents(value) ? `Melebihi nilai dokumen SP. Sisa nilai dokumen: ${formatRupiah(fromCents(left > 0n ? left : 0n))}.` : null;
+}
+
+/**
+ * Mencari paket RUP pada tahapan transaksi; bila kode ada di tahapan lain pada tahun yang sama, barisnya disalin ke tahapan transaksi
+ * (fungsi database ensure_rup_in_version) agar transaksi dapat ditautkan. Galat dikembalikan sebagai pesan yang dapat ditindaklanjuti.
+ */
+async function ensureRup(sb: Awaited<ReturnType<typeof createClient>>, code: string, versionId: string, stageName: string): Promise<{ id: string; planned: string | null } | { error: string }> {
+  const norm = normalizeRupCode(code);
+  const direct = await sb.from("rup_packages").select("id, planned_method_id").eq("budget_version_id", versionId).eq("rup_code", norm).maybeSingle();
+  if (direct.data) return { id: direct.data.id, planned: direct.data.planned_method_id };
+  const r = await sb.rpc("ensure_rup_in_version", { p_code: norm, p_version: versionId });
+  if (r.error) {
+    if (r.error.code === "P0001") return { error: r.error.message };
+    if (r.error.code === "42883" || r.error.message?.includes("schema cache")) return { error: `Kode RUP ${norm} belum ada pada tahapan ${stageName}. Jalankan migrasi 20260124 (penautan RUP lintas tahapan) di Supabase, atau sinkronkan RUP tahapan ${stageName} di menu Paket RUP.` };
+    return { error: `Kode RUP ${norm} tidak dapat ditautkan pada tahapan ${stageName}. Anda mungkin tidak berwenang.` };
+  }
+  const { data } = await sb.from("rup_packages").select("id, planned_method_id").eq("id", r.data as string).maybeSingle();
+  return data ? { id: data.id, planned: data.planned_method_id } : { error: `Kode RUP ${norm} tidak dapat dibaca setelah ditautkan.` };
 }
 
 const NO_AUTH = "Anda tidak berwenang mengubah realisasi (hanya Super Admin, Admin OPD, dan PPBJ).";
@@ -123,10 +142,10 @@ export async function saveTransaction(_p: FormState, fd: FormData): Promise<Form
   // Kode RUP & metode: RUP harus ada pada arsip RUP tahapan transaksi; metode kosong + RUP berencana metode -> mengikuti rencana RUP.
   let wantMethod = d.method_id;
   if (d.rup_code) {
-    const { data: rp } = await sb.from("rup_packages").select("id, planned_method_id").eq("budget_version_id", targetVid).eq("rup_code", d.rup_code.replace(/\.0+$/, "")).maybeSingle();
-    if (!rp) return { error: "Kode RUP tidak ditemukan pada tahapan transaksi ini. Sinkronkan RUP tahapan tersebut (menu Paket RUP), periksa kodenya, atau kosongkan." };
+    const stageName = (await loadStageVersions(sb, ctx.yearId)).find((v) => v.id === targetVid)?.stageName ?? "transaksi ini";
+    const rp = await ensureRup(sb, d.rup_code, targetVid, stageName); if ("error" in rp) return { error: rp.error };
     if (rp.id !== row.rup_package_id) patch.rup_package_id = rp.id;
-    wantMethod = wantMethod ?? rp.planned_method_id ?? null;
+    wantMethod = wantMethod ?? rp.planned ?? null;
   } else if (row.rup_package_id) patch.rup_package_id = null;
   if (!same(wantMethod, row.procurement_method_id)) patch.procurement_method_id = wantMethod;
   if (d.provider_id) { const { data: pv } = await sb.from("providers").select("is_active").eq("id", d.provider_id).maybeSingle(); if (!pv?.is_active && d.provider_id !== row.provider_id) return { error: "Penyedia yang dipilih tidak ditemukan atau nonaktif." }; }
