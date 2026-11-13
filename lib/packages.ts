@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { parseRupiah } from "./import/parse";
+const optText = (max: number, msg: string) => z.string().trim().max(max, msg).optional().transform((v) => v || null);
+const optD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal tidak valid").or(z.literal("")).optional().transform((v) => v || null);
 const optUuid = z.union([z.literal(""), z.string().uuid()]).transform((v) => v || null);
 const optDate = z.union([z.literal(""), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal tidak valid")]).transform((v) => v || null);
 export const packageSchema = z.object({
@@ -31,4 +33,5 @@ export const packageEditSchema = z.object({
   procurement_type: z.enum(["barang", "konstruksi", "konsultansi", "jasa_lainnya"], { message: "Pilih jenis pengadaan" }),
   is_recurring: z.string().optional().transform((v) => v === "on" || v === "true"),
   method_id: optUuid, ppbj_id: optUuid, ppk_id: optUuid, pptk_id: optUuid, due_date: optDate,
+  process_start: optD, process_end: optD, handover_date: optD, obstacle_category: optText(120, "Kategori kendala maksimal 120 karakter"), notes: optText(500, "Catatan maksimal 500 karakter"),
 });
