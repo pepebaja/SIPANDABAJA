@@ -196,3 +196,11 @@ describe("kelengkapan data Laporan Kinerja PPBJ", () => {
     expect(g.serah).toMatchObject({ missing: 1, of: 1 }); expect(g.metode?.missing).toBe(1); expect(g.kendala).toMatchObject({ missing: 2, of: 2 });
   });
 });
+
+import { normalizeRupCode } from "@/lib/rup-code";
+describe("normalisasi kode RUP", () => {
+  it("membuang spasi dan akhiran .0 dari Excel", () => {
+    expect(normalizeRupCode(" 61861502 ")).toBe("61861502"); expect(normalizeRupCode("61 861 502")).toBe("61861502");
+    expect(normalizeRupCode("61861502.0")).toBe("61861502"); expect(normalizeRupCode(null)).toBe(""); expect(normalizeRupCode("6186.15")).toBe("6186.15");
+  });
+});
