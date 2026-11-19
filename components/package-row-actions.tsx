@@ -10,7 +10,7 @@ import { OBSTACLES } from "@/lib/package-obstacles";
 export type PkgSummary = { count: number; total: string; remaining: string; pct: string | null };
 export type PkgRow = { id: string; code: string; name: string; pagu: string; status: string; method_id: string | null; execution_mode: string; procurement_type: string | null; is_recurring: boolean; due_date: string | null; summary?: PkgSummary | null; process_start: string | null; process_end: string | null; handover_date: string | null; obstacle_category: string | null; notes: string | null; ppbj_id: string | null; ppk_id: string | null; pptk_id: string | null };
 type Opt = { value: string; label: string };
-const cls = "mt-1 w-full";
+const cls = "";
 
 function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: PkgRow; statuses: Opt[]; methods: Opt[]; ppbj: Opt[]; ppk: Opt[]; pptk: Opt[]; close: () => void }) {
   const [s, action, pending] = useActionState<FormState, FormData>(updatePackage, {});
@@ -18,34 +18,37 @@ function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: Pkg
   useEffect(() => { if (s.ok) close(); }, [s, close]);
   const sel = (name: string, v: string | null, opts: Opt[], empty: string) => <select name={name} defaultValue={v ?? ""} className={cls}><option value="">{empty}</option>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
   return (
-    <form action={action} className="space-y-3">
+    <form action={action} className="dlg-form">
       <input type="hidden" name="id" value={row.id} />
+      <div className="dlg-body">
       {row.is_recurring && row.summary && <div className={`rounded-xl border p-3 text-sm ${Number(row.summary.pct ?? 0) >= 100 ? "border-red-300 bg-red-50" : Number(row.summary.pct ?? 0) >= 80 ? "border-amber-300 bg-amber-50" : "border-cyan-200 bg-cyan-50/60"}`} aria-label="Ringkasan pelaksanaan">
         <p className="font-semibold">Ringkasan pelaksanaan (paket berulang)</p><p><b>{row.summary.count}</b> pelaksanaan · terpakai <b>{formatRupiah(row.summary.total)}</b>{row.summary.pct !== null && <> ({row.summary.pct.replace(".", ",")}% dari pagu)</>} · sisa pagu <b>{formatRupiah(row.summary.remaining)}</b>{Number(row.summary.pct ?? 0) >= 80 && <b> · pagu menipis, periksa kebutuhan sampai akhir tahun</b>}</p></div>}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm font-medium sm:col-span-2">Nama paket *<input name="name" required maxLength={300} defaultValue={row.name} className={cls} /></label>
-        <label className="block text-sm font-medium">Pagu paket (Rp) *<input name="pagu" required inputMode="decimal" autoComplete="off" value={pagu} onChange={(e) => setPagu(e.target.value)} className={cls} aria-invalid={!!pagu && val === null} />
+      <div className="fgrid">
+        <label className="fld fwide">Nama paket *<input name="name" required maxLength={300} defaultValue={row.name} className={cls} /></label>
+        <label className="fld">Pagu paket (Rp) *<input name="pagu" required inputMode="decimal" autoComplete="off" value={pagu} onChange={(e) => setPagu(e.target.value)} className={cls} aria-invalid={!!pagu && val === null} />
           <span className="text-xs font-normal">{pagu && val === null ? <b className="text-red-700">Angka tidak dikenali</b> : val !== null ? <b>{formatRupiah(val)}</b> : null}</span></label>
-        <label className="block text-sm font-medium">Status{<select name="status" required defaultValue={row.status} className={cls}>{statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>}</label>
-        <label className="block text-sm font-medium">Metode pemilihan{sel("method_id", row.method_id, methods, "(belum ditentukan)")}</label>
-        <label className="block text-sm font-medium">Jenis pengadaan<select name="procurement_type" defaultValue={row.procurement_type ?? "jasa_lainnya"} className={cls}>{Object.entries(JENIS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-        <label className="block text-sm font-medium">Mode pelaksanaan<select name="execution_mode" defaultValue={row.execution_mode} className={cls}><option value="penyedia">Penyedia</option><option value="swakelola">Swakelola</option></select></label>
-        {rec ? <div className="text-sm text-slate-600"><input type="hidden" name="due_date" value="" /><p className="mt-6">Paket berulang: tanpa tenggat tunggal.</p></div> : <label className="block text-sm font-medium">Tenggat<input type="date" name="due_date" defaultValue={row.due_date ?? ""} className={cls} /></label>}
-        <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" name="is_recurring" checked={rec} onChange={(e) => setRec(e.target.checked)} className="mt-1" /><span><b>Paket berulang</b> (dibelanjakan berkali-kali, mis. konsumsi rapat, pemeliharaan kendaraan): banyak pelaksanaan, kontrak/SP, dan pembayaran di bawah satu kode RUP.</span></label>
-        <fieldset className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:col-span-2 sm:grid-cols-3"><legend className="px-1 text-sm font-medium">Data untuk Laporan Kinerja PPBJ</legend>
-          <label className="block text-sm font-medium">Mulai proses<input type="date" name="process_start" defaultValue={row.process_start ?? ""} className={cls} /></label>
-          <label className="block text-sm font-medium">Selesai proses<input type="date" name="process_end" defaultValue={row.process_end ?? ""} className={cls} /></label>
-          <label className="block text-sm font-medium">Serah terima<input type="date" name="handover_date" defaultValue={row.handover_date ?? ""} className={cls} /></label>
-          <label className="block text-sm font-medium sm:col-span-3">Kategori kendala<select name="obstacle_category" defaultValue={row.obstacle_category ?? ""} className={cls}><option value="">(tidak ada kendala)</option>{[...OBSTACLES, ...(row.obstacle_category && !(OBSTACLES as readonly string[]).includes(row.obstacle_category) ? [row.obstacle_category] : [])].map((o) => <option key={o} value={o}>{o}</option>)}</select></label>
-          <label className="block text-sm font-medium sm:col-span-3">Catatan<input name="notes" maxLength={500} defaultValue={row.notes ?? ""} autoComplete="off" className={cls} /></label>
-        </fieldset>
-        <label className="block text-sm font-medium">PPBJ{sel("ppbj_id", row.ppbj_id, ppbj, "(belum dipilih)")}</label>
-        <label className="block text-sm font-medium">PPK{sel("ppk_id", row.ppk_id, ppk, "(belum dipilih)")}</label>
-        <label className="block text-sm font-medium">PPTK{sel("pptk_id", row.pptk_id, pptk, "(belum dipilih)")}</label>
+        <label className="fld">Status{<select name="status" required defaultValue={row.status} className={cls}>{statuses.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>}</label>
+        <label className="fld">Metode pemilihan{sel("method_id", row.method_id, methods, "(belum ditentukan)")}</label>
+        <label className="fld">Jenis pengadaan<select name="procurement_type" defaultValue={row.procurement_type ?? "jasa_lainnya"} className={cls}>{Object.entries(JENIS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+        <label className="fld">Mode pelaksanaan<select name="execution_mode" defaultValue={row.execution_mode} className={cls}><option value="penyedia">Penyedia</option><option value="swakelola">Swakelola</option></select></label>
+        {rec ? <div className="text-sm text-slate-600"><input type="hidden" name="due_date" value="" /><p className="mt-6">Paket berulang: tanpa tenggat tunggal.</p></div> : <label className="fld">Tenggat<input type="date" name="due_date" defaultValue={row.due_date ?? ""} className={cls} /></label>}
+        <label className="fwide flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm font-normal"><input type="checkbox" name="is_recurring" checked={rec} onChange={(e) => setRec(e.target.checked)} className="mt-1" /><span><b>Paket berulang</b> (dibelanjakan berkali-kali, mis. konsumsi rapat, pemeliharaan kendaraan): banyak pelaksanaan, kontrak/SP, dan pembayaran di bawah satu kode RUP.</span></label>
+        <fieldset className="fwide rounded-xl border border-slate-200 bg-slate-50/50 p-4"><legend className="px-1 text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-cyan-800">Data untuk Laporan Kinerja PPBJ</legend><div className="fgrid">
+          <label className="fld">Mulai proses<input type="date" name="process_start" defaultValue={row.process_start ?? ""} className={cls} /></label>
+          <label className="fld">Selesai proses<input type="date" name="process_end" defaultValue={row.process_end ?? ""} className={cls} /></label>
+          <label className="fld">Serah terima<input type="date" name="handover_date" defaultValue={row.handover_date ?? ""} className={cls} /></label>
+          <label className="fld fwide">Kategori kendala<select name="obstacle_category" defaultValue={row.obstacle_category ?? ""} className={cls}><option value="">(tidak ada kendala)</option>{[...OBSTACLES, ...(row.obstacle_category && !(OBSTACLES as readonly string[]).includes(row.obstacle_category) ? [row.obstacle_category] : [])].map((o) => <option key={o} value={o}>{o}</option>)}</select></label>
+          <label className="fld fwide">Catatan<input name="notes" maxLength={500} defaultValue={row.notes ?? ""} autoComplete="off" className={cls} /></label>
+        </div></fieldset>
+        <label className="fld">PPBJ{sel("ppbj_id", row.ppbj_id, ppbj, "(belum dipilih)")}</label>
+        <label className="fld">PPK{sel("ppk_id", row.ppk_id, ppk, "(belum dipilih)")}</label>
+        <label className="fld">PPTK{sel("pptk_id", row.pptk_id, pptk, "(belum dipilih)")}</label>
       </div>
-      <p className="text-xs text-slate-500">Kode paket = kode RUP <b>{row.code}</b> (tidak diubah di sini). Mengubah pagu paket tidak mengubah pagu RUP atau anggaran. Isian pejabat/tenggat yang dikosongkan akan dihapus.</p>
+      <p className="text-xs leading-snug text-slate-500">Kode paket = kode RUP <b>{row.code}</b> (tidak diubah di sini). Mengubah pagu paket tidak mengubah pagu RUP atau anggaran. Isian pejabat/tenggat/tanggal yang dikosongkan akan dihapus.</p>
       {s.error && <p role="alert" className="alert alert-error">{s.error}</p>}
-      <div className="flex gap-2"><button className="btn btn-primary btn-sm" disabled={pending || (!!pagu && val === null)}>{pending ? "Menyimpan..." : "Simpan perubahan"}</button><button type="button" className="btn btn-ghost btn-sm" onClick={close}>Batal</button></div>
+      </div>
+      <div className="dlg-foot"><span className="text-xs text-slate-500">Paket {row.code}</span>
+        <div className="flex gap-2"><button type="button" className="btn btn-ghost btn-sm" onClick={close}>Batal</button><button className="btn btn-primary btn-sm" disabled={pending || (!!pagu && val === null)}>{pending ? "Menyimpan..." : "Simpan perubahan"}</button></div></div>
     </form>);
 }
 
@@ -59,8 +62,11 @@ export function PackageRowActions({ row, statuses, methods, ppbj, ppk, pptk }: {
       <form action={delAction}><input type="hidden" name="id" value={row.id} />
         <ConfirmButton message={`Hapus paket ${row.code} - ${row.name}? Riwayat status paket ikut terhapus (jejak tetap ada di Log audit). Paket yang sudah punya transaksi atau kontrak tidak dapat dihapus.`} className="btn btn-danger btn-sm">{deleting ? "Menghapus..." : "Hapus"}</ConfirmButton></form>
       {d.error && <p role="alert" className="basis-full max-w-64 text-xs text-red-700">{d.error}</p>}
-      <dialog ref={ref} onClose={() => setOpen(false)} aria-labelledby={`pk-${row.id}`} className="w-[min(42rem,94vw)] rounded-2xl border border-slate-200 p-0 shadow-xl backdrop:bg-slate-900/40">
-        {open && <div className="space-y-3 p-5"><h2 id={`pk-${row.id}`} className="font-semibold">Ubah paket {row.code}</h2><EditForm row={row} statuses={statuses} methods={methods} ppbj={ppbj} ppk={ppk} pptk={pptk} close={() => setOpen(false)} /></div>}
+      <dialog ref={ref} onClose={() => setOpen(false)} aria-labelledby={`pk-${row.id}`} className="dlg">
+        {open && <>
+          <header className="dlg-head"><h2 id={`pk-${row.id}`} className="font-display text-lg font-bold text-navy-800">Ubah paket {row.code}</h2><p className="mt-1 line-clamp-2 text-xs text-slate-600">{row.name}</p>
+            <button type="button" className="dlg-close" onClick={() => setOpen(false)} aria-label="Tutup">×</button></header>
+          <EditForm row={row} statuses={statuses} methods={methods} ppbj={ppbj} ppk={ppk} pptk={pptk} close={() => setOpen(false)} /></>}
       </dialog>
     </div>);
 }
