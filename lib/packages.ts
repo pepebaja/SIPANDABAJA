@@ -33,5 +33,5 @@ export const packageEditSchema = z.object({
   procurement_type: z.enum(["barang", "konstruksi", "konsultansi", "jasa_lainnya"], { message: "Pilih jenis pengadaan" }),
   is_recurring: z.string().optional().transform((v) => v === "on" || v === "true"),
   method_id: optUuid, ppbj_id: optUuid, ppk_id: optUuid, pptk_id: optUuid, due_date: optDate,
-  process_start: optD, process_end: optD, handover_date: optD, obstacle_category: optText(120, "Kategori kendala maksimal 120 karakter"), notes: optText(500, "Catatan maksimal 500 karakter"),
+  process_start: optD, process_end: optD, handover_date: optD, obstacle_category: optText(200, "Kategori kendala maksimal 200 karakter"), notes: optText(500, "Catatan maksimal 500 karakter"),
 });
