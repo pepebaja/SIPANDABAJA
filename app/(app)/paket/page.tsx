@@ -6,6 +6,7 @@ import { todayIso } from "@/lib/date";
 import { Icon } from "@/components/icons";
 import { generatePackagesFromRup, syncWithRealization } from "./actions";
 import { JENIS_LABEL } from "@/lib/procurement-profile";
+import { obstacleSuggestions } from "@/lib/package-obstacles";
 import { PackageRowActions } from "@/components/package-row-actions";
 import { loadPackageExecutions } from "@/lib/server/package-executions";
 import { summarizeExecutions } from "@/lib/package-executions";
@@ -48,6 +49,7 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
   const { data: data0, count, error } = await query, data = (data0 ?? []) as any[];
   const sums = new Map(await Promise.all((data ?? []).filter((p) => p.is_recurring).map(async (p) => [p.id, summarizeExecutions(await loadPackageExecutions(sb, { id: p.id, internal_code: p.internal_code, budget_version_id: ctx.versionId! }), parseRupiah(p.pagu) ?? "0.00")] as const)));   // ringkasan pelaksanaan paket berulang
   const [methodsRes, offRes] = canWrite ? await Promise.all([sb.from("procurement_methods").select("id, name").eq("is_active", true).order("name"), sb.from("officials").select("id, name, nip, official_type").eq("is_active", true).order("name").limit(1000)]) : [null, null];
+  const usedObs = canWrite ? ((await sb.from("procurement_packages").select("obstacle_category").not("obstacle_category", "is", null).limit(1000)).data ?? []).map((r) => r.obstacle_category as string) : [], obstacles = obstacleSuggestions(usedObs);
   const methodOpts = (methodsRes?.data ?? []).map((m) => ({ value: m.id as string, label: m.name as string })), statusOpts = meta.map((m) => ({ value: m.code as string, label: m.name as string }));
   const off = (t: string) => (offRes?.data ?? []).filter((r) => r.official_type === t).map((r) => ({ value: r.id as string, label: r.nip ? `${r.name} - NIP ${r.nip}` : (r.name as string) }));
   const statusName = new Map(meta.map((s) => [s.code, s.name])), pages = Math.max(1, Math.ceil((count ?? 0) / PAGE));
@@ -83,7 +85,7 @@ export default async function PaketPage({ searchParams }: { searchParams: Promis
             <td className="text-sm">{p.procurement_type ? JENIS_LABEL[p.procurement_type] : <span className="text-amber-800">jenis belum diisi</span>}<span className="block text-xs text-slate-600">{(p as any).method?.name ?? "metode belum ditentukan"}</span></td>
             <td className="text-right tabular-nums">{formatRupiah(parseRupiah(p.pagu) ?? "0.00")}</td><td><span className="badge badge-info">{statusName.get(p.status) ?? p.status}</span></td>
             <td className={!p.is_recurring && p.due_date && p.due_date < todayIso() ? "font-semibold text-amber-800" : ""}>{p.is_recurring ? <span className="text-slate-500">berulang</span> : p.due_date ? p.due_date.split("-").reverse().join("/") : "-"}</td>
-            {canWrite && <td className="min-w-40"><PackageRowActions statuses={statusOpts} methods={methodOpts} ppbj={off("ppbj")} ppk={off("ppk")} pptk={off("pptk")}
+            {canWrite && <td className="min-w-40"><PackageRowActions obstacles={obstacles} statuses={statusOpts} methods={methodOpts} ppbj={off("ppbj")} ppk={off("ppk")} pptk={off("pptk")}
               row={{ id: p.id, code: p.internal_code, name: p.name, pagu: String(p.pagu), status: p.status, method_id: p.method_id, execution_mode: p.execution_mode, procurement_type: p.procurement_type, is_recurring: !!p.is_recurring, summary: sums.get(p.id) ?? null, due_date: p.due_date, process_start: p.process_start, process_end: p.process_end, handover_date: p.handover_date, obstacle_category: p.obstacle_category, notes: p.notes, ppbj_id: p.ppbj_id, ppk_id: p.ppk_id, pptk_id: p.pptk_id }} /></td>}</tr>)}</tbody></table></div>)}
       <nav className="flex items-center gap-3 text-sm" aria-label="Halaman">
         {page > 1 && <Link className="link" href={href(page - 1)}>Sebelumnya</Link>}<span>Halaman {page} dari {pages} ({count ?? 0} paket)</span>

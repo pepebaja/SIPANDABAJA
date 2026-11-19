@@ -6,13 +6,12 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { parseRupiah } from "@/lib/import/parse";
 import { formatRupiah } from "@/lib/format";
 import { JENIS_LABEL } from "@/lib/procurement-profile";
-import { OBSTACLES } from "@/lib/package-obstacles";
 export type PkgSummary = { count: number; total: string; remaining: string; pct: string | null };
 export type PkgRow = { id: string; code: string; name: string; pagu: string; status: string; method_id: string | null; execution_mode: string; procurement_type: string | null; is_recurring: boolean; due_date: string | null; summary?: PkgSummary | null; process_start: string | null; process_end: string | null; handover_date: string | null; obstacle_category: string | null; notes: string | null; ppbj_id: string | null; ppk_id: string | null; pptk_id: string | null };
 type Opt = { value: string; label: string };
 const cls = "";
 
-function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: PkgRow; statuses: Opt[]; methods: Opt[]; ppbj: Opt[]; ppk: Opt[]; pptk: Opt[]; close: () => void }) {
+function EditForm({ row, statuses, methods, ppbj, ppk, pptk, obstacles, close }: { row: PkgRow; statuses: Opt[]; methods: Opt[]; ppbj: Opt[]; ppk: Opt[]; pptk: Opt[]; obstacles: string[]; close: () => void }) {
   const [s, action, pending] = useActionState<FormState, FormData>(updatePackage, {});
   const [pagu, setPagu] = useState(parseRupiah(row.pagu) ?? row.pagu), val = parseRupiah(pagu), [rec, setRec] = useState(row.is_recurring);
   useEffect(() => { if (s.ok) close(); }, [s, close]);
@@ -37,7 +36,8 @@ function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: Pkg
           <label className="fld">Mulai proses<input type="date" name="process_start" defaultValue={row.process_start ?? ""} className={cls} /></label>
           <label className="fld">Selesai proses<input type="date" name="process_end" defaultValue={row.process_end ?? ""} className={cls} /></label>
           <label className="fld">Serah terima<input type="date" name="handover_date" defaultValue={row.handover_date ?? ""} className={cls} /></label>
-          <label className="fld fwide">Kategori kendala<select name="obstacle_category" defaultValue={row.obstacle_category ?? ""} className={cls}><option value="">(tidak ada kendala)</option>{[...OBSTACLES, ...(row.obstacle_category && !(OBSTACLES as readonly string[]).includes(row.obstacle_category) ? [row.obstacle_category] : [])].map((o) => <option key={o} value={o}>{o}</option>)}</select></label>
+          <label className="fld fwide">Kategori kendala<input name="obstacle_category" list={`obs-${row.id}`} maxLength={200} defaultValue={row.obstacle_category ?? ""} placeholder="Pilih dari saran atau ketik sendiri (kosongkan bila tidak ada kendala)" autoComplete="off" />
+            <datalist id={`obs-${row.id}`}>{obstacles.map((o) => <option key={o} value={o} />)}</datalist><span className="fh">Klik kolom untuk melihat saran, atau tulis kendala sendiri. Kendala yang pernah Anda tulis di paket lain ikut muncul sebagai saran.</span></label>
           <label className="fld fwide">Catatan<input name="notes" maxLength={500} defaultValue={row.notes ?? ""} autoComplete="off" className={cls} /></label>
         </div></fieldset>
         <label className="fld">PPBJ{sel("ppbj_id", row.ppbj_id, ppbj, "(belum dipilih)")}</label>
@@ -53,7 +53,7 @@ function EditForm({ row, statuses, methods, ppbj, ppk, pptk, close }: { row: Pkg
 }
 
 /** Tombol Ubah (dialog formulir lengkap) dan Hapus (dengan konfirmasi) pada setiap baris daftar paket. Galat tampil di tempat. */
-export function PackageRowActions({ row, statuses, methods, ppbj, ppk, pptk }: { row: PkgRow; statuses: Opt[]; methods: Opt[]; ppbj: Opt[]; ppk: Opt[]; pptk: Opt[] }) {
+export function PackageRowActions({ row, statuses, methods, ppbj, ppk, pptk, obstacles }: { row: PkgRow; statuses: Opt[]; methods: Opt[]; ppbj: Opt[]; ppk: Opt[]; pptk: Opt[]; obstacles: string[] }) {
   const [open, setOpen] = useState(false), ref = useRef<HTMLDialogElement>(null), [d, delAction, deleting] = useActionState<FormState, FormData>(deletePackage, {});
   useEffect(() => { const el = ref.current; if (!el) return; if (open && !el.open) el.showModal(); if (!open && el.open) el.close(); }, [open]);
   return (
@@ -66,7 +66,7 @@ export function PackageRowActions({ row, statuses, methods, ppbj, ppk, pptk }: {
         {open && <>
           <header className="dlg-head"><h2 id={`pk-${row.id}`} className="font-display text-lg font-bold text-navy-800">Ubah paket {row.code}</h2><p className="mt-1 line-clamp-2 text-xs text-slate-600">{row.name}</p>
             <button type="button" className="dlg-close" onClick={() => setOpen(false)} aria-label="Tutup">×</button></header>
-          <EditForm row={row} statuses={statuses} methods={methods} ppbj={ppbj} ppk={ppk} pptk={pptk} close={() => setOpen(false)} /></>}
+          <EditForm row={row} statuses={statuses} methods={methods} ppbj={ppbj} ppk={ppk} pptk={pptk} obstacles={obstacles} close={() => setOpen(false)} /></>}
       </dialog>
     </div>);
 }
