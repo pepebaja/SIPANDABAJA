@@ -204,3 +204,12 @@ describe("normalisasi kode RUP", () => {
     expect(normalizeRupCode("61861502.0")).toBe("61861502"); expect(normalizeRupCode(null)).toBe(""); expect(normalizeRupCode("6186.15")).toBe("6186.15");
   });
 });
+
+import { obstacleSuggestions, OBSTACLES } from "@/lib/package-obstacles";
+describe("saran kategori kendala", () => {
+  it("daftar baku dahulu, isian bebas unik ikut sebagai saran", () => {
+    const r = obstacleSuggestions(["Barang kosong di toko", "  barang   kosong di TOKO ", "sanggahan atau pengaduan", null, "", "Anggaran kas belum cair"]);
+    expect(r.slice(0, OBSTACLES.length)).toEqual([...OBSTACLES]);
+    expect(r.slice(OBSTACLES.length)).toEqual(["Anggaran kas belum cair", "Barang kosong di toko"]);
+  });
+});
